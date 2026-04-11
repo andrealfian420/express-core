@@ -4,6 +4,7 @@ const { generateToken } = require('../../utils/token')
 const prisma = require('../../config/database')
 const AppError = require('../../utils/appError')
 const { generateAccessToken } = require('../../utils/jwt')
+const { emailQueue } = require('../../jobs')
 
 // This service contains the business logic for authentication-related operations.
 class AuthService {
@@ -36,7 +37,11 @@ class AuthService {
       },
     })
 
-    // TODO: Send verification email with the token
+    // Add email sending job to the queue
+    await emailQueue.add('sendVerificationEmail', {
+      email: user.email,
+      token: token,
+    })
 
     return { user, token }
   }
