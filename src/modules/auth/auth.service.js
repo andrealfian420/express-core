@@ -40,6 +40,7 @@ class AuthService {
     // Add email sending job to the queue
     await emailQueue.add('sendVerificationEmail', {
       email: user.email,
+      name: user.name,
       token: token,
     })
 
@@ -122,7 +123,7 @@ class AuthService {
         id: record.userId,
       },
       data: {
-        emailVerified: true,
+        isEmailVerified: true,
       },
     })
 
@@ -132,7 +133,17 @@ class AuthService {
       },
     })
 
-    // TODO: Send success email verification notification
+    const user = await prisma.user.findUnique({
+      where: {
+        id: record.userId,
+      },
+    })
+
+    // Send success email verification notification
+    await emailQueue.add('sendVerificationSuccessEmail', {
+      email: user.email,
+      name: user.name,
+    })
   }
 
   async forgotPassword(email) {
