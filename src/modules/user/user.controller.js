@@ -2,19 +2,19 @@ const userService = require('./user.service')
 
 // UserController handles HTTP requests related to users.
 class UserController {
-  async index(req, res) {
+  async index(req, res, next) {
     try {
       const users = await userService.getUsers()
       res.status(200).json({
         success: true,
         data: users,
       })
-    } catch (err) {
-      res.status(400).json({ error: err.message })
+      } catch (err) {
+        next(err)
     }
   }
 
-  async store(req, res) {
+  async store(req, res, next) {
     try {
       const user = await userService.createUser(req.body)
       res.status(201).json({
@@ -22,7 +22,7 @@ class UserController {
         data: user,
       })
     } catch (err) {
-      res.status(400).json({ error: err.message })
+      next(err)
     }
   }
 }

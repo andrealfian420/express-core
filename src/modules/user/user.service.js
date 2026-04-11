@@ -1,3 +1,4 @@
+const AppError = require('../../utils/appError')
 const userRepository = require('./user.repository')
 const bcrypt = require('bcryptjs')
 
@@ -14,7 +15,7 @@ class UserService {
   async createUser(data) {
     const existingUser = await userRepository.findByEmail(data.email)
     if (existingUser) {
-      throw new Error('Email already in use')
+      throw new AppError('Email already in use', 400)
     }
 
     data.password = await bcrypt.hash(data.password, 12)

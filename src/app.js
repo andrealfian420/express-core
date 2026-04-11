@@ -7,12 +7,14 @@ const { createWriteStream } = require('fs')
 const logConfig = require('./config/log.config')
 const corsConfig = require('./config/cors.config')
 const helmetConfig = require('./config/helmet.config')
+const errorHandler = require('./middleware/error.middleware')
 
 require('dotenv').config()
 
 const routes = require('./routes')
 
 const app = express()
+app.set('trust proxy', 1)
 
 // attackers can use this header to detect apps running Express
 // and then launch specifically-targeted attacks
@@ -79,8 +81,8 @@ if (process.env.ENABLELOG) {
   app.use('/storage', express.static('./client/storage'))
 }
 
-app.set('trust proxy', 1)
-
 app.use('/api/v1/', routes)
+
+app.use(errorHandler)
 
 module.exports = app
