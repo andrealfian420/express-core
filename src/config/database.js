@@ -16,6 +16,9 @@ const prisma =
       models: {
         // enable soft delete for the these models
         User: true,
+        RefreshToken: true,
+        EmailVerificationToken: true,
+        PasswordResetToken: true,
       },
       defaultConfig: {
         field: 'deletedAt',
