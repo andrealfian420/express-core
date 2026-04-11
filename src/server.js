@@ -1,7 +1,9 @@
-const app = require('./app');
+const app = require('./app')
+const startCronJobs = require('./jobs/cron')
 
-const PORT = process.env.PORT || 3001;
+startCronJobs()
+const PORT = process.env.PORT || 3001
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+  console.log(`Server is running on port ${PORT}`)
+})
