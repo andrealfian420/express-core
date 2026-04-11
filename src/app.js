@@ -78,7 +78,7 @@ if (process.env.ENABLELOG) {
     }),
   )
 
-  app.use('/storage', express.static('./client/storage'))
+  app.use('/storage', express.static('./client/storage/public'))
 }
 
 app.use('/api/v1/', routes)
