@@ -6,6 +6,7 @@ const AppError = require('../../utils/appError')
 const { generateAccessToken } = require('../../utils/jwt')
 const { emailQueue } = require('../../jobs')
 const logger = require('../../config/logger')
+const { makeUniqueSlug } = require('../../utils/sluggable')
 
 // This service contains the business logic for authentication-related operations.
 class AuthService {
@@ -20,8 +21,19 @@ class AuthService {
       Number(process.env.BCRYPT_ROUNDS),
     )
 
+    const slug = await makeUniqueSlug(userData.name, (candidate, excludeId) =>
+      prisma.user.findFirst({
+        where: {
+          slug: candidate,
+          deletedAt: null,
+          ...(excludeId ? { id: { not: excludeId } } : {}),
+        },
+      }),
+    )
+
     const user = await authRepository.createUser({
       name: userData.name,
+      slug,
       email: userData.email,
       password: hashedPassword,
     })

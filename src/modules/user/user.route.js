@@ -1,6 +1,6 @@
 const express = require('express')
 const userController = require('./user.controller')
-const { createUserSchema } = require('./user.validation')
+const { createUserSchema, updateUserSchema } = require('./user.validation')
 const validate = require('../../middleware/validate.middleware')
 const authMiddleware = require('../../middleware/auth.middleware')
 const checkPermission = require('../../middleware/rbac.middleware')
@@ -15,6 +15,12 @@ router.get(
   userController.index,
 )
 
+router.get(
+  '/:slug',
+  checkPermission(PERMISSIONS.DATA_MASTER.USER.INDEX),
+  userController.show,
+)
+
 router.post(
   '/',
   [
@@ -22,6 +28,15 @@ router.post(
     validate(createUserSchema),
   ],
   userController.store,
+)
+
+router.put(
+  '/:slug',
+  [
+    checkPermission(PERMISSIONS.DATA_MASTER.USER.EDIT),
+    validate(updateUserSchema),
+  ],
+  userController.update,
 )
 
 module.exports = router

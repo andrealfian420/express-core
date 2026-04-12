@@ -2,6 +2,7 @@ const AppError = require('../../utils/appError')
 const roleRepository = require('./role.repository')
 const cacheService = require('../../services/cache.service')
 const { ALL_PERMISSIONS } = require('./role.permissions')
+const { makeUniqueSlug } = require('../../utils/sluggable')
 
 const CACHE_TTL = 300 // 5 minutes
 const cacheKey = (id) => `role:${id}`
@@ -12,26 +13,30 @@ class RoleService {
     return await roleRepository.findAll()
   }
 
-  async getRoleById(id) {
-    const cached = await cacheService.get(cacheKey(id))
+  async getRole(slug) {
+    const cached = await cacheService.get(cacheKey(slug))
     if (cached) {
       return cached
     }
 
-    const role = await roleRepository.findById(id)
+    const role = await roleRepository.findBySlug(slug)
     if (!role) {
       throw new AppError('Role not found', 404)
     }
 
-    await cacheService.set(cacheKey(id), role, CACHE_TTL)
+    await cacheService.set(cacheKey(slug), role, CACHE_TTL)
     return role
   }
 
   async createRole(data) {
     this._validateAccess(data.access)
 
+    const slug = await makeUniqueSlug(data.title, (candidate, excludeId) =>
+      roleRepository.findBySlugExcluding(candidate, excludeId),
+    )
+
     return await roleRepository.create({
-      slug: data.slug,
+      slug,
       title: data.title,
       userType: data.userType,
       description: data.description ?? null,
@@ -39,8 +44,8 @@ class RoleService {
     })
   }
 
-  async updateRole(id, data) {
-    const role = await roleRepository.findById(id)
+  async updateRole(slug, data) {
+    const role = await roleRepository.findBySlug(slug)
 
     if (!role) {
       throw new AppError('Role not found', 404)
@@ -50,34 +55,45 @@ class RoleService {
       this._validateAccess(data.access)
     }
 
-    const updated = await roleRepository.update(id, {
-      ...(data.slug && { slug: data.slug }),
+    // onUpdate: regenerate slug whenever title changes
+    let newSlug
+    if (data.title && data.title !== role.title) {
+      newSlug = await makeUniqueSlug(
+        data.title,
+        (candidate, excludeId) =>
+          roleRepository.findBySlugExcluding(candidate, excludeId),
+        role.id,
+      )
+    }
+
+    const updated = await roleRepository.update(role.id, {
       ...(data.title && { title: data.title }),
+      ...(newSlug && { slug: newSlug }),
       ...(data.userType && { userType: data.userType }),
       ...(data.description !== undefined && { description: data.description }),
       ...(data.access && { access: data.access }),
     })
 
-    await cacheService.del(cacheKey(id))
+    await cacheService.del(cacheKey(role.slug))
 
     // delete all user caches that have this role assigned
-    const userIds = await cacheService.smembers(`role-users:${id}`)
+    const userIds = await cacheService.smembers(`role-users:${role.id}`)
     for (const userId of userIds) {
       await cacheService.del(`user-role:${userId}`)
     }
 
-    await cacheService.del(`role-users:${id}`)
+    await cacheService.del(`role-users:${role.id}`)
 
     return updated
   }
 
-  async deleteRole(id) {
-    const role = await roleRepository.findById(id)
+  async deleteRole(slug) {
+    const role = await roleRepository.findBySlug(slug)
     if (!role) {
       throw new AppError('Role not found', 404)
     }
 
-    const userCount = await roleRepository.countUsers(id)
+    const userCount = await roleRepository.countUsers(role.id)
 
     if (userCount > 0) {
       throw new AppError(
@@ -86,14 +102,14 @@ class RoleService {
       )
     }
 
-    await roleRepository.delete(id)
-    await cacheService.del(cacheKey(id))
-    await cacheService.smembers(`role-users:${id}`).then((userIds) => {
+    await roleRepository.delete(role.id)
+    await cacheService.del(cacheKey(role.slug))
+    await cacheService.smembers(`role-users:${role.id}`).then((userIds) => {
       userIds.forEach(
         async (userId) => await cacheService.del(`user-role:${userId}`),
       )
     })
-    await cacheService.del(`role-users:${id}`)
+    await cacheService.del(`role-users:${role.id}`)
   }
 
   // Validate that all given permission values exist in ALL_PERMISSIONS

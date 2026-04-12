@@ -19,7 +19,7 @@ router.get(
 )
 
 router.get(
-  '/:id',
+  '/:slug',
   checkPermission(PERMISSIONS.DATA_MASTER.ROLE.INDEX),
   roleController.show,
 )
@@ -32,14 +32,14 @@ router.post(
 )
 
 router.put(
-  '/:id',
+  '/:slug',
   checkPermission(PERMISSIONS.DATA_MASTER.ROLE.EDIT),
   validate(updateRoleSchema),
   roleController.update,
 )
 
 router.delete(
-  '/:id',
+  '/:slug',
   checkPermission(PERMISSIONS.DATA_MASTER.ROLE.DELETE),
   roleController.destroy,
 )

@@ -30,6 +30,16 @@ class RoleRepository {
     })
   }
 
+  async findBySlugExcluding(slug, excludeId = null) {
+    return await prisma.role.findFirst({
+      where: {
+        slug,
+        deletedAt: null,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+    })
+  }
+
   async create(data) {
     return await prisma.role.create({ data })
   }

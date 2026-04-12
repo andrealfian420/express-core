@@ -9,8 +9,20 @@ class UserController {
         success: true,
         data: users,
       })
-      } catch (err) {
-        next(err)
+    } catch (err) {
+      next(err)
+    }
+  }
+
+  async show(req, res, next) {
+    try {
+      const user = await userService.getUserBySlug(req.params.slug)
+      res.status(200).json({
+        success: true,
+        data: user,
+      })
+    } catch (err) {
+      next(err)
     }
   }
 
@@ -18,6 +30,18 @@ class UserController {
     try {
       const user = await userService.createUser(req.body)
       res.status(201).json({
+        success: true,
+        data: user,
+      })
+    } catch (err) {
+      next(err)
+    }
+  }
+
+  async update(req, res, next) {
+    try {
+      const user = await userService.updateUser(req.params.slug, req.body)
+      res.status(200).json({
         success: true,
         data: user,
       })

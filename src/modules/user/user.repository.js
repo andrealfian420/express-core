@@ -10,9 +10,16 @@ class UserRepository {
       select: {
         id: true,
         name: true,
+        slug: true,
         email: true,
         isEmailVerified: true,
-      }
+      },
+    })
+  }
+
+  async find(slug) {
+    return await prisma.user.findFirst({
+      where: { slug, deletedAt: null },
     })
   }
 
@@ -25,8 +32,25 @@ class UserRepository {
     })
   }
 
+  async findBySlugExcluding(slug, excludeId = null) {
+    return await prisma.user.findFirst({
+      where: {
+        slug,
+        deletedAt: null,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+    })
+  }
+
   async create(data) {
     return await prisma.user.create({
+      data,
+    })
+  }
+
+  async update(id, data) {
+    return await prisma.user.update({
+      where: { id },
       data,
     })
   }
