@@ -59,6 +59,15 @@ class RoleService {
     })
 
     await cacheService.del(cacheKey(id))
+
+    // delete all user caches that have this role assigned
+    const userIds = await cacheService.smembers(`role-users:${id}`)
+    for (const userId of userIds) {
+      await cacheService.del(`user-role:${userId}`)
+    }
+
+    await cacheService.del(`role-users:${id}`)
+
     return updated
   }
 
@@ -79,6 +88,12 @@ class RoleService {
 
     await roleRepository.delete(id)
     await cacheService.del(cacheKey(id))
+    await cacheService.smembers(`role-users:${id}`).then((userIds) => {
+      userIds.forEach(
+        async (userId) => await cacheService.del(`user-role:${userId}`),
+      )
+    })
+    await cacheService.del(`role-users:${id}`)
   }
 
   // Validate that all given permission values exist in ALL_PERMISSIONS

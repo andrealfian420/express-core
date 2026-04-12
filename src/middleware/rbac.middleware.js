@@ -41,6 +41,13 @@ const checkPermission = (permission) => {
         }
 
         await cacheService.set(cacheKey, userData, USER_ROLE_CACHE_TTL)
+
+        // Cache the role ID for quick invalidation when role permissions change
+        await cacheService.sadd(
+          `role-users:${userData.role.id}`,
+          userId,
+          USER_ROLE_CACHE_TTL,
+        )
       }
 
       if (!userData.role) {
@@ -54,7 +61,7 @@ const checkPermission = (permission) => {
       if (!grantedAccess.includes(permission)) {
         return next(
           new AppError(
-            `Access denied: missing permission '${permission}'`,
+            `You do not have permission to perform this action`,
             403,
           ),
         )
