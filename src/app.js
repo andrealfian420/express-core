@@ -4,9 +4,9 @@ const helmet = require('helmet')
 const compression = require('compression')
 const morgan = require('morgan')
 const { createWriteStream } = require('fs')
-const logConfig = require('./config/log.config')
-const corsConfig = require('./config/cors.config')
-const helmetConfig = require('./config/helmet.config')
+const logConfig = require('./config/log')
+const corsConfig = require('./config/cors')
+const helmetConfig = require('./config/helmet')
 const errorHandler = require('./middleware/error.middleware')
 const { apiRateLimiter } = require('./middleware/rate-limit.middleware')
 
@@ -62,7 +62,7 @@ if (process.env.ENABLELOG) {
         skip: function (req, res) {
           return !req.originalUrl.includes('api/v1') || res.statusCode >= 400
         },
-        stream: createWriteStream('./client/storage/access.log', {
+        stream: createWriteStream('./client/storage/http-access.log', {
           flags: 'a',
         }),
       }),
@@ -75,7 +75,7 @@ if (process.env.ENABLELOG) {
       skip: function (req, res) {
         return !req.originalUrl.includes('api/v1') || res.statusCode < 400
       },
-      stream: createWriteStream('./client/storage/error.log', {
+      stream: createWriteStream('./client/storage/http-error.log', {
         flags: 'a',
       }),
     }),

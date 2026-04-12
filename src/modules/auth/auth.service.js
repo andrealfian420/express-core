@@ -5,6 +5,7 @@ const prisma = require('../../config/database')
 const AppError = require('../../utils/appError')
 const { generateAccessToken } = require('../../utils/jwt')
 const { emailQueue } = require('../../jobs')
+const logger = require('../../config/logger')
 
 // This service contains the business logic for authentication-related operations.
 class AuthService {
@@ -44,6 +45,8 @@ class AuthService {
       token: token,
     })
 
+    logger.info(`New user registered: ${user.email}`)
+
     return { user, token }
   }
 
@@ -65,6 +68,8 @@ class AuthService {
 
     const accessToken = generateAccessToken(user)
     const refreshToken = generateToken()
+
+    logger.info(`User ${user.email} logged in`)
 
     await authRepository.createRefreshToken({
       token: refreshToken,
@@ -144,6 +149,8 @@ class AuthService {
       email: user.email,
       name: user.name,
     })
+
+    logger.info(`Email verified successfully for user: ${user.email}`)
   }
 
   async forgotPassword(email) {
@@ -166,6 +173,8 @@ class AuthService {
     })
 
     // TODO: Send password reset email with the token
+
+    logger.info(`Password reset token created for user: ${user.email}`)
   }
 
   async resetPassword(token, newPassword) {
@@ -214,6 +223,8 @@ class AuthService {
         usedAt: new Date(),
       },
     })
+
+    logger.info(`Password reset successfully for user ID: ${record.userId}`)
   }
 }
 

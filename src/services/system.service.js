@@ -1,9 +1,10 @@
 const prisma = require('../config/database')
+const logger = require('../config/logger')
 
 class SystemService {
   async cleanupExpiredTokens() {
     const now = new Date()
-    console.log('Starting cleanup of expired tokens...')
+    logger.info('Starting cleanup of expired tokens')
 
     await prisma.refreshToken.deleteMany({
       where: {
@@ -29,7 +30,7 @@ class SystemService {
       },
     })
 
-    console.log('Cleanup of expired tokens completed.')
+    logger.info('Finished cleanup of expired tokens')
   }
 }
 
