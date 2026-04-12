@@ -9,7 +9,6 @@ const corsConfig = require('./config/cors')
 const helmetConfig = require('./config/helmet')
 const errorHandler = require('./middleware/error.middleware')
 const { apiRateLimiter } = require('./middleware/rate-limit.middleware')
-const mongoSanitize = require('express-mongo-sanitize')
 const hpp = require('hpp')
 const xssMiddleware = require('./middleware/xss.middleware')
 
@@ -53,7 +52,6 @@ app.use((req, res, next) => {
 })
 
 app.use('/api', apiRateLimiter)
-app.use(mongoSanitize())
 app.use(hpp())
 
 app.use(express.urlencoded({ limit: process.env.FORMLIMIT, extended: true })) // for parsing application/x-www-form-urlencoded
