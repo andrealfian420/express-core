@@ -1,6 +1,7 @@
 const AppError = require('../../utils/appError')
 const userRepository = require('./user.repository')
 const bcrypt = require('bcryptjs')
+const cacheService = require('../../services/cache.service')
 
 // UserService contains business logic related to users.
 class UserService {
@@ -9,7 +10,17 @@ class UserService {
   }
 
   async getUserByEmail(email) {
-    return await userRepository.findByEmail(email)
+    const cacheKey = `user:${email}`
+    const cachedUser = await cacheService.get(cacheKey)
+
+    if (cachedUser) {
+      return cachedUser
+    }
+
+    const user = await userRepository.findByEmail(email)
+    await cacheService.set(cacheKey, user, 300) // cache for 5 minutes
+
+    return user
   }
 
   async createUser(data) {
