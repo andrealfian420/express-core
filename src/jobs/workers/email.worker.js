@@ -4,7 +4,7 @@ const emailService = require('../../services/email.service')
 const AppError = require('../../utils/appError')
 const { QUEUE_NAMES } = require('../config/queue.constants')
 
-new Worker(
+const emailWorker = new Worker(
   QUEUE_NAMES.EMAIL,
   async (job) => {
     switch (job.name) {
@@ -36,3 +36,5 @@ new Worker(
     concurrency: 5, // Process up to 5 jobs concurrently
   },
 )
+
+module.exports = emailWorker

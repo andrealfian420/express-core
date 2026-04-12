@@ -4,7 +4,7 @@ const AppError = require('../../utils/appError')
 const { QUEUE_NAMES } = require('../config/queue.constants')
 const systemService = require('../../services/system.service')
 
-new Worker(
+const systemWorker = new Worker(
   QUEUE_NAMES.SYSTEM,
   async (job) => {
     switch (job.name) {
@@ -20,3 +20,6 @@ new Worker(
     concurrency: 10, // Process up to 10 jobs concurrently
   },
 )
+
+module.exports = systemWorker
+
