@@ -7,23 +7,43 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Role {
+  id          Int       @id @default(autoincrement())
+  slug        String    @unique
+  title       String
+  userType    String    @map("user_type")
+  description String?
+  access      Json      @default("[]")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  users User[]
+
+  @@map("roles")
+  @@index([deletedAt])
+}
+
 model User {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   name            String?
   email           String?
   password        String?
   avatar          String?
-  isEmailVerified Boolean  @default(false) @map("is_email_verified")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  roleId          Int?      @map("role_id")
+  isEmailVerified Boolean   @default(false) @map("is_email_verified")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
   deletedAt       DateTime? @map("deleted_at")
 
+  role                 Role?                    @relation(fields: [roleId], references: [id])
   refreshTokens        RefreshToken[]
   emailVerifications   EmailVerificationToken[]
   passwordResets       PasswordResetToken[]
 
   @@map("users")
   @@index([deletedAt])
+  @@index([roleId])
 }
 
 model RefreshToken {
