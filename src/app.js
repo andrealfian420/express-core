@@ -8,6 +8,7 @@ const logConfig = require('./config/log.config')
 const corsConfig = require('./config/cors.config')
 const helmetConfig = require('./config/helmet.config')
 const errorHandler = require('./middleware/error.middleware')
+const { apiRateLimiter } = require('./middleware/rate-limit.middleware')
 
 require('dotenv').config()
 
@@ -48,6 +49,8 @@ app.use((req, res, next) => {
   }
 })
 
+app.use('/api', apiRateLimiter)
+
 app.use(express.urlencoded({ limit: process.env.FORMLIMIT, extended: true })) // for parsing application/x-www-form-urlencoded
 app.use(express.json({ limit: process.env.FORMLIMIT }))
 
@@ -77,12 +80,10 @@ if (process.env.ENABLELOG) {
       }),
     }),
   )
-
-  app.use('/storage', express.static('./client/storage/public'))
 }
 
+app.use('/storage', express.static('./client/storage/public'))
 app.use('/api/v1/', routes)
-
 app.use(errorHandler)
 
 module.exports = app

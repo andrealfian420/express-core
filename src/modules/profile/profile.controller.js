@@ -15,7 +15,7 @@ class ProfileController {
 
   async updateProfile(req, res, next) {
     try {
-      const avatar = req.file ? req.file.filename : null
+      const avatar = req.file ? req.file.filename : undefined
       const updatedProfile = await profileService.updateProfile(
         req.user.sub,
         { ...req.body, avatar },
