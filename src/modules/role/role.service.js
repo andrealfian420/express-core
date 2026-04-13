@@ -9,8 +9,8 @@ const cacheKey = (id) => `role:${id}`
 
 // Service layer for Role management
 class RoleService {
-  async getRoles() {
-    return await roleRepository.findAll()
+  async getRoles(req) {
+    return await roleRepository.paginate(req)
   }
 
   async getRole(slug) {

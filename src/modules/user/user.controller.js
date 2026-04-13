@@ -4,10 +4,10 @@ const userService = require('./user.service')
 class UserController {
   async index(req, res, next) {
     try {
-      const users = await userService.getUsers()
+      const result = await userService.getUsers(req)
       res.status(200).json({
         success: true,
-        data: users,
+        ...result,
       })
     } catch (err) {
       next(err)

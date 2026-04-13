@@ -9,8 +9,8 @@ const slugCacheKey = (slug) => `user:slug:${slug}`
 
 // UserService contains business logic related to users.
 class UserService {
-  async getUsers() {
-    return await userRepository.getUser()
+  async getUsers(req) {
+    return await userRepository.paginate(req)
   }
 
   async getUserBySlug(slug) {

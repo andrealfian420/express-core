@@ -1,21 +1,27 @@
 const prisma = require('../../config/database')
+const { paginate } = require('../../utils/paginator')
 
 class RoleRepository {
-  async findAll() {
-    return await prisma.role.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        userType: true,
-        description: true,
-        access: true,
-        createdAt: true,
-        updatedAt: true,
+  async paginate(req) {
+    return await paginate(
+      prisma.role,
+      {
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          userType: true,
+          description: true,
+          access: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        searchFields: ['title', 'description'],
+        allowedSorts: ['title', 'userType', 'createdAt'],
       },
-    })
+      req,
+    )
   }
 
   async findById(id) {

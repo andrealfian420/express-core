@@ -5,8 +5,8 @@ const { ACCESS_LIST } = require('./role.permissions')
 class RoleController {
   async index(req, res, next) {
     try {
-      const roles = await roleService.getRoles()
-      res.status(200).json({ success: true, data: roles })
+      const result = await roleService.getRoles(req)
+      res.status(200).json({ success: true, ...result })
     } catch (err) {
       next(err)
     }
