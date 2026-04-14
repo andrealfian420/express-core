@@ -2,6 +2,7 @@ const AppError = require('../../utils/appError')
 const profileRepository = require('./profile.repository')
 const storageService = require('../../services/storage.service')
 const cacheService = require('../../services/cache.service')
+const systemService = require('../../services/system.service')
 
 class ProfileService {
   async getProfile(userId) {
@@ -42,6 +43,25 @@ class ProfileService {
 
     const cacheKey = `profile:${userId}`
     await cacheService.set(cacheKey, updatedProfile, 300) // cache for 5 minutes
+
+    // Log activity
+    await systemService.logActivity(
+      userId,
+      'UPDATE',
+      'Profile',
+      userId,
+      'Profile updated',
+      {
+        name: existingProfile.name,
+        email: existingProfile.email,
+        avatar: existingProfile.avatar,
+      },
+      {
+        name: updatedProfile.name,
+        email: updatedProfile.email,
+        avatar: updatedProfile.avatar,
+      },
+    )
 
     return {
       ...updatedProfile,

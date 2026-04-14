@@ -19,6 +19,7 @@ const prisma =
         RefreshToken: true,
         EmailVerificationToken: true,
         PasswordResetToken: true,
+        ActivityLog: true,
       },
       defaultConfig: {
         field: 'deletedAt',

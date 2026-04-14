@@ -3,6 +3,7 @@ const userRepository = require('./user.repository')
 const bcrypt = require('bcryptjs')
 const cacheService = require('../../services/cache.service')
 const { makeUniqueSlug } = require('../../utils/sluggable')
+const systemService = require('../../services/system.service')
 
 const USER_CACHE_TTL = 300 // 5 minutes
 const slugCacheKey = (slug) => `user:slug:${slug}`
@@ -39,7 +40,7 @@ class UserService {
     return user
   }
 
-  async createUser(data) {
+  async createUser(data, createdBy = null) {
     const existingUser = await userRepository.findByEmail(data.email)
     if (existingUser) {
       throw new AppError('Email already in use', 400)
@@ -51,10 +52,23 @@ class UserService {
 
     data.password = await bcrypt.hash(data.password, 12)
 
-    return await userRepository.create({ ...data, slug })
+    const user = await userRepository.create({ ...data, slug })
+
+    // Log activity
+    await systemService.logActivity(
+      createdBy,
+      'CREATE',
+      'User',
+      user.id,
+      `User created: ${user.name}`,
+      null,
+      { email: user.email, name: user.name, slug: user.slug },
+    )
+
+    return user
   }
 
-  async updateUser(slug, data) {
+  async updateUser(slug, data, updatedBy = null) {
     const user = await userRepository.find(slug)
     if (!user) throw new AppError('User not found', 404)
 
@@ -86,6 +100,27 @@ class UserService {
     // If slug changed, the new one will be populated on next request
     // Invalidate RBAC cache so role changes take effect immediately
     await cacheService.del(`user-role:${user.id}`)
+
+    // Log activity
+    await systemService.logActivity(
+      updatedBy,
+      'UPDATE',
+      'User',
+      user.id,
+      `User updated: ${updated.name}`,
+      {
+        name: user.name,
+        email: user.email,
+        slug: user.slug,
+        roleId: user.roleId,
+      },
+      {
+        name: updated.name,
+        email: updated.email,
+        slug: updated.slug,
+        roleId: updated.roleId,
+      },
+    )
 
     return updated
   }

@@ -86,3 +86,19 @@ model PasswordResetToken {
 
   @@map("password_reset_tokens")
 }
+
+model ActivityLog {
+  id            Int       @id @default(autoincrement())
+  userId        Int       @map("user_id")
+  action        String?   // ("Ex: CREATE, UPDATE, DELETE")
+  description   String?   // ("Description activity")
+  subjectType   String?   @map("subject_type") // ("Table / Model Name")
+  subjectId     Int       @map("subject_id")
+  oldData       Json      @default("[]") @map("old_data")
+  newData       Json      @default("[]") @map("new_data")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  @@index([userId])
+  @@map("activity_logs")
+}

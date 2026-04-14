@@ -24,7 +24,7 @@ class RoleController {
 
   async store(req, res, next) {
     try {
-      const role = await roleService.createRole(req.body)
+      const role = await roleService.createRole(req.body, req.user.sub)
       response(res, role, 'Role created successfully', 201)
     } catch (err) {
       next(err)
@@ -33,7 +33,11 @@ class RoleController {
 
   async update(req, res, next) {
     try {
-      const role = await roleService.updateRole(req.params.slug, req.body)
+      const role = await roleService.updateRole(
+        req.params.slug,
+        req.body,
+        req.user.sub,
+      )
       response(res, role, 'Role updated successfully')
     } catch (err) {
       next(err)
@@ -42,7 +46,7 @@ class RoleController {
 
   async destroy(req, res, next) {
     try {
-      await roleService.deleteRole(req.params.slug)
+      await roleService.deleteRole(req.params.slug, req.user.sub)
       response(res, null, 'Role deleted successfully')
     } catch (err) {
       next(err)

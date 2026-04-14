@@ -23,7 +23,7 @@ class UserController {
 
   async store(req, res, next) {
     try {
-      const user = await userService.createUser(req.body)
+      const user = await userService.createUser(req.body, req.user.sub)
       response(res, user, 'User created successfully', 201)
     } catch (err) {
       next(err)
@@ -32,7 +32,11 @@ class UserController {
 
   async update(req, res, next) {
     try {
-      const user = await userService.updateUser(req.params.slug, req.body)
+      const user = await userService.updateUser(
+        req.params.slug,
+        req.body,
+        req.user.sub,
+      )
       response(res, user, 'User updated successfully')
     } catch (err) {
       next(err)

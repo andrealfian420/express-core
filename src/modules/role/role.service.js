@@ -3,6 +3,7 @@ const roleRepository = require('./role.repository')
 const cacheService = require('../../services/cache.service')
 const { ALL_PERMISSIONS } = require('./role.permissions')
 const { makeUniqueSlug } = require('../../utils/sluggable')
+const systemService = require('../../services/system.service')
 
 const CACHE_TTL = 300 // 5 minutes
 const cacheKey = (id) => `role:${id}`
@@ -28,23 +29,36 @@ class RoleService {
     return role
   }
 
-  async createRole(data) {
+  async createRole(data, createdBy = null) {
     this._validateAccess(data.access)
 
     const slug = await makeUniqueSlug(data.title, (candidate, excludeId) =>
       roleRepository.findBySlugExcluding(candidate, excludeId),
     )
 
-    return await roleRepository.create({
+    const role = await roleRepository.create({
       slug,
       title: data.title,
       userType: data.userType,
       description: data.description ?? null,
       access: data.access,
     })
+
+    // Log activity
+    await systemService.logActivity(
+      createdBy,
+      'CREATE',
+      'Role',
+      role.id,
+      `Role created: ${role.title}`,
+      null,
+      { title: role.title, userType: role.userType, slug: role.slug },
+    )
+
+    return role
   }
 
-  async updateRole(slug, data) {
+  async updateRole(slug, data, updatedBy = null) {
     const role = await roleRepository.findBySlug(slug)
 
     if (!role) {
@@ -84,10 +98,21 @@ class RoleService {
 
     await cacheService.del(`role-users:${role.id}`)
 
+    // Log activity
+    await systemService.logActivity(
+      updatedBy,
+      'UPDATE',
+      'Role',
+      role.id,
+      `Role updated: ${updated.title}`,
+      { title: role.title, userType: role.userType, slug: role.slug },
+      { title: updated.title, userType: updated.userType, slug: updated.slug },
+    )
+
     return updated
   }
 
-  async deleteRole(slug) {
+  async deleteRole(slug, deletedBy = null) {
     const role = await roleRepository.findBySlug(slug)
     if (!role) {
       throw new AppError('Role not found', 404)
@@ -110,6 +135,17 @@ class RoleService {
       )
     })
     await cacheService.del(`role-users:${role.id}`)
+
+    // Log activity
+    await systemService.logActivity(
+      deletedBy,
+      'DELETE',
+      'Role',
+      role.id,
+      `Role deleted: ${role.title}`,
+      { title: role.title, userType: role.userType, slug: role.slug },
+      null,
+    )
   }
 
   // Validate that all given permission values exist in ALL_PERMISSIONS
