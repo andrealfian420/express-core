@@ -37,14 +37,16 @@ class UserRepository {
     )
   }
 
-  async find(slug) {
-    return await prisma.user.findFirst({
+  async find(slug, txOrPrisma = null) {
+    const db = txOrPrisma || prisma
+    return await db.user.findFirst({
       where: { slug, deletedAt: null },
     })
   }
 
-  async findByEmail(email) {
-    return await prisma.user.findFirst({
+  async findByEmail(email, txOrPrisma = null) {
+    const db = txOrPrisma || prisma
+    return await db.user.findFirst({
       where: {
         email,
         deletedAt: null,
@@ -52,8 +54,9 @@ class UserRepository {
     })
   }
 
-  async findBySlugExcluding(slug, excludeId = null) {
-    return await prisma.user.findFirst({
+  async findBySlugExcluding(slug, excludeId = null, txOrPrisma = null) {
+    const db = txOrPrisma || prisma
+    return await db.user.findFirst({
       where: {
         slug,
         deletedAt: null,
@@ -62,14 +65,16 @@ class UserRepository {
     })
   }
 
-  async create(data) {
-    return await prisma.user.create({
+  async create(data, txOrPrisma = null) {
+    const db = txOrPrisma || prisma
+    return await db.user.create({
       data,
     })
   }
 
-  async update(id, data) {
-    return await prisma.user.update({
+  async update(id, data, txOrPrisma = null) {
+    const db = txOrPrisma || prisma
+    return await db.user.update({
       where: { id },
       data,
     })

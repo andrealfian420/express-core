@@ -7,59 +7,71 @@ const { generateAccessToken } = require('../../utils/jwt')
 const { emailQueue } = require('../../jobs')
 const logger = require('../../config/logger')
 const { makeUniqueSlug } = require('../../utils/sluggable')
+const userRepository = require('../user/user.repository')
 
 // This service contains the business logic for authentication-related operations.
 class AuthService {
   async register(userData) {
-    const existingUser = await authRepository.findUserByEmail(userData.email)
-    if (existingUser) {
-      throw new AppError('Email already in use', 400)
-    }
+    // Use transaction to ensure user and verification token are created atomically
+    const result = await prisma.$transaction(async (tx) => {
+      const existingUser = await authRepository.findUserByEmail(
+        userData.email,
+        tx,
+      )
+      if (existingUser) {
+        throw new AppError('Email already in use', 400)
+      }
 
-    const hashedPassword = await bcrypt.hash(
-      userData.password,
-      Number(process.env.BCRYPT_ROUNDS),
-    )
+      const hashedPassword = await bcrypt.hash(
+        userData.password,
+        Number(process.env.BCRYPT_ROUNDS),
+      )
 
-    const slug = await makeUniqueSlug(userData.name, (candidate, excludeId) =>
-      prisma.user.findFirst({
-        where: {
-          slug: candidate,
-          deletedAt: null,
-          ...(excludeId ? { id: { not: excludeId } } : {}),
+      const slug = await makeUniqueSlug(userData.name, (candidate, excludeId) =>
+        tx.user.findFirst({
+          where: {
+            slug: candidate,
+            deletedAt: null,
+            ...(excludeId ? { id: { not: excludeId } } : {}),
+          },
+        }),
+      )
+
+      const user = await authRepository.createUser(
+        {
+          name: userData.name,
+          slug,
+          email: userData.email,
+          password: hashedPassword,
         },
-      }),
-    )
+        tx,
+      )
 
-    const user = await authRepository.createUser({
-      name: userData.name,
-      slug,
-      email: userData.email,
-      password: hashedPassword,
+      const token = generateToken()
+
+      await tx.emailVerificationToken.create({
+        data: {
+          token: token,
+          userId: user.id,
+          expiresAt: new Date(
+            Date.now() + process.env.EMAIL_VERIFICATION_EXPIRES_HOURS * 3600000,
+          ),
+        },
+      })
+
+      return { user, token }
     })
 
-    const token = generateToken()
-
-    await prisma.emailVerificationToken.create({
-      data: {
-        token: token,
-        userId: user.id,
-        expiresAt: new Date(
-          Date.now() + process.env.EMAIL_VERIFICATION_EXPIRES_HOURS * 3600000,
-        ),
-      },
-    })
-
-    // Add email sending job to the queue
+    // Add email sending job to the queue AFTER transaction succeeds
     await emailQueue.add('sendVerificationEmail', {
-      email: user.email,
-      name: user.name,
-      token: token,
+      email: result.user.email,
+      name: result.user.name,
+      token: result.token,
     })
 
-    logger.info(`New user registered: ${user.email}`)
+    logger.info(`New user registered: ${result.user.email}`)
 
-    return { user, token }
+    return result
   }
 
   async login(email, password) {
@@ -116,47 +128,52 @@ class AuthService {
   }
 
   async verifyEmail(token) {
-    const record = await prisma.emailVerificationToken.findUnique({
-      where: {
-        token: token,
-      },
-    })
-
-    if (!record) {
-      throw new AppError('Invalid token', 400)
-    }
-
-    if (record.expiresAt < new Date()) {
-      await prisma.emailVerificationToken.delete({
+    // Use transaction to ensure user update and token deletion are atomic
+    const user = await prisma.$transaction(async (tx) => {
+      const record = await tx.emailVerificationToken.findUnique({
         where: {
           token: token,
         },
       })
-      throw new AppError('Token expired', 400)
-    }
 
-    await prisma.user.update({
-      where: {
-        id: record.userId,
-      },
-      data: {
-        isEmailVerified: true,
-      },
+      if (!record) {
+        throw new AppError('Invalid token', 400)
+      }
+
+      if (record.expiresAt < new Date()) {
+        await tx.emailVerificationToken.delete({
+          where: {
+            token: token,
+          },
+        })
+        throw new AppError('Token expired', 400)
+      }
+
+      await tx.user.update({
+        where: {
+          id: record.userId,
+        },
+        data: {
+          isEmailVerified: true,
+        },
+      })
+
+      await tx.emailVerificationToken.delete({
+        where: {
+          token: token,
+        },
+      })
+
+      const updatedUser = await tx.user.findUnique({
+        where: {
+          id: record.userId,
+        },
+      })
+
+      return updatedUser
     })
 
-    await prisma.emailVerificationToken.delete({
-      where: {
-        token: token,
-      },
-    })
-
-    const user = await prisma.user.findUnique({
-      where: {
-        id: record.userId,
-      },
-    })
-
-    // Send success email verification notification
+    // Send success email verification notification AFTER transaction succeeds
     await emailQueue.add('sendVerificationSuccessEmail', {
       email: user.email,
       name: user.name,
@@ -190,53 +207,35 @@ class AuthService {
   }
 
   async resetPassword(token, newPassword) {
-    const record = await prisma.passwordResetToken.findUnique({
-      where: {
-        token: token,
-      },
+    // Use transaction to ensure password update and token marking are atomic
+    const userId = await prisma.$transaction(async (tx) => {
+      const record = await authRepository.findUniqueToken(token, tx)
+
+      if (!record) {
+        throw new AppError('Invalid token', 400)
+      }
+
+      if (record.expiresAt < new Date()) {
+        await authRepository.deletePasswordResetToken(token, tx)
+        throw new AppError('Token expired', 400)
+      }
+
+      if (record.usedAt) {
+        throw new AppError('Token already used', 400)
+      }
+
+      const hashedPassword = await bcrypt.hash(
+        newPassword,
+        Number(process.env.BCRYPT_ROUNDS),
+      )
+
+      await userRepository.update(record.userId, { password: hashedPassword }, tx)
+      await authRepository.updatePasswordResetToken(token, { usedAt: new Date() }, tx)
+
+      return record.userId
     })
 
-    if (!record) {
-      throw new AppError('Invalid token', 400)
-    }
-
-    if (record.expiresAt < new Date()) {
-      await prisma.passwordResetToken.delete({
-        where: {
-          token: token,
-        },
-      })
-      throw new AppError('Token expired', 400)
-    }
-
-    if (record.usedAt) {
-      throw new AppError('Token already used', 400)
-    }
-
-    const hashedPassword = await bcrypt.hash(
-      newPassword,
-      Number(process.env.BCRYPT_ROUNDS),
-    )
-
-    await prisma.user.update({
-      where: {
-        id: record.userId,
-      },
-      data: {
-        password: hashedPassword,
-      },
-    })
-
-    await prisma.passwordResetToken.update({
-      where: {
-        token: token,
-      },
-      data: {
-        usedAt: new Date(),
-      },
-    })
-
-    logger.info(`Password reset successfully for user ID: ${record.userId}`)
+    logger.info(`Password reset successfully for user ID: ${userId}`)
   }
 }
 

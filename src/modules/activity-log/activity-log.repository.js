@@ -29,8 +29,9 @@ class ActivityLogRepository {
     )
   }
 
-  async findById(id) {
-    return await prisma.activityLog.findFirst({
+  async findById(id, txOrPrisma = null) {
+    const db = txOrPrisma || prisma
+    return await db.activityLog.findFirst({
       where: { id, deletedAt: null },
       select: {
         id: true,

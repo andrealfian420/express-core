@@ -58,13 +58,15 @@ class SystemService {
     description,
     oldData = null,
     newData = null,
+    txOrPrisma = null,
   ) {
     try {
+      const db = txOrPrisma || prisma
       // If description is not provided, generate a default one based on action and subjectType
       const finalDescription =
         description || this.generateDefaultDescription(action, subjectType)
 
-      await prisma.activityLog.create({
+      await db.activityLog.create({
         data: {
           userId,
           action: action.toUpperCase(),

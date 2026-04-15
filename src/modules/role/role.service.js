@@ -4,6 +4,7 @@ const cacheService = require('../../services/cache.service')
 const { ALL_PERMISSIONS } = require('./role.permissions')
 const { makeUniqueSlug } = require('../../utils/sluggable')
 const systemService = require('../../services/system.service')
+const prisma = require('../../config/database')
 
 const CACHE_TTL = 300 // 5 minutes
 const cacheKey = (id) => `role:${id}`
@@ -32,28 +33,41 @@ class RoleService {
   async createRole(data, createdBy = null) {
     this._validateAccess(data.access)
 
-    const slug = await makeUniqueSlug(data.title, (candidate, excludeId) =>
-      roleRepository.findBySlugExcluding(candidate, excludeId),
-    )
+    // Use transaction to ensure role creation and activity logging are atomic
+    const role = await prisma.$transaction(async (tx) => {
+      const slug = await makeUniqueSlug(data.title, (candidate, excludeId) =>
+        roleRepository.findBySlugExcluding(candidate, excludeId, tx),
+      )
 
-    const role = await roleRepository.create({
-      slug,
-      title: data.title,
-      userType: data.userType,
-      description: data.description ?? null,
-      access: data.access,
+      const newRole = await roleRepository.create(
+        {
+          slug,
+          title: data.title,
+          userType: data.userType,
+          description: data.description ?? null,
+          access: data.access,
+        },
+        tx,
+      )
+
+      // Log activity within transaction
+      await systemService.logActivity(
+        createdBy,
+        'CREATE',
+        'Role',
+        newRole.id,
+        `Role created: ${newRole.title}`,
+        null,
+        {
+          title: newRole.title,
+          userType: newRole.userType,
+          slug: newRole.slug,
+        },
+        tx,
+      )
+
+      return newRole
     })
-
-    // Log activity
-    await systemService.logActivity(
-      createdBy,
-      'CREATE',
-      'Role',
-      role.id,
-      `Role created: ${role.title}`,
-      null,
-      { title: role.title, userType: role.userType, slug: role.slug },
-    )
 
     return role
   }
@@ -69,25 +83,53 @@ class RoleService {
       this._validateAccess(data.access)
     }
 
-    // onUpdate: regenerate slug whenever title changes
-    let newSlug
-    if (data.title && data.title !== role.title) {
-      newSlug = await makeUniqueSlug(
-        data.title,
-        (candidate, excludeId) =>
-          roleRepository.findBySlugExcluding(candidate, excludeId),
-        role.id,
-      )
-    }
+    // Use transaction to ensure role update and activity logging are atomic
+    const updated = await prisma.$transaction(async (tx) => {
+      // onUpdate: regenerate slug whenever title changes
+      let newSlug
+      if (data.title && data.title !== role.title) {
+        newSlug = await makeUniqueSlug(
+          data.title,
+          (candidate, excludeId) =>
+            roleRepository.findBySlugExcluding(candidate, excludeId, tx),
+          role.id,
+        )
+      }
 
-    const updated = await roleRepository.update(role.id, {
-      ...(data.title && { title: data.title }),
-      ...(newSlug && { slug: newSlug }),
-      ...(data.userType && { userType: data.userType }),
-      ...(data.description !== undefined && { description: data.description }),
-      ...(data.access && { access: data.access }),
+      const updatedRole = await roleRepository.update(
+        role.id,
+        {
+          ...(data.title && { title: data.title }),
+          ...(newSlug && { slug: newSlug }),
+          ...(data.userType && { userType: data.userType }),
+          ...(data.description !== undefined && {
+            description: data.description,
+          }),
+          ...(data.access && { access: data.access }),
+        },
+        tx,
+      )
+
+      // Log activity within transaction
+      await systemService.logActivity(
+        updatedBy,
+        'UPDATE',
+        'Role',
+        role.id,
+        `Role updated: ${updatedRole.title}`,
+        { title: role.title, userType: role.userType, slug: role.slug },
+        {
+          title: updatedRole.title,
+          userType: updatedRole.userType,
+          slug: updatedRole.slug,
+        },
+        tx,
+      )
+
+      return updatedRole
     })
 
+    // Clear caches AFTER transaction succeeds
     await cacheService.del(cacheKey(role.slug))
 
     // delete all user caches that have this role assigned
@@ -97,17 +139,6 @@ class RoleService {
     }
 
     await cacheService.del(`role-users:${role.id}`)
-
-    // Log activity
-    await systemService.logActivity(
-      updatedBy,
-      'UPDATE',
-      'Role',
-      role.id,
-      `Role updated: ${updated.title}`,
-      { title: role.title, userType: role.userType, slug: role.slug },
-      { title: updated.title, userType: updated.userType, slug: updated.slug },
-    )
 
     return updated
   }
@@ -127,7 +158,24 @@ class RoleService {
       )
     }
 
-    await roleRepository.delete(role.id)
+    // Use transaction to ensure role deletion and activity logging are atomic
+    await prisma.$transaction(async (tx) => {
+      await roleRepository.delete(role.id, tx)
+
+      // Log activity within transaction
+      await systemService.logActivity(
+        deletedBy,
+        'DELETE',
+        'Role',
+        role.id,
+        `Role deleted: ${role.title}`,
+        { title: role.title, userType: role.userType, slug: role.slug },
+        null,
+        tx,
+      )
+    })
+
+    // Clear caches AFTER transaction succeeds
     await cacheService.del(cacheKey(role.slug))
     await cacheService.smembers(`role-users:${role.id}`).then((userIds) => {
       userIds.forEach(
@@ -135,17 +183,6 @@ class RoleService {
       )
     })
     await cacheService.del(`role-users:${role.id}`)
-
-    // Log activity
-    await systemService.logActivity(
-      deletedBy,
-      'DELETE',
-      'Role',
-      role.id,
-      `Role deleted: ${role.title}`,
-      { title: role.title, userType: role.userType, slug: role.slug },
-      null,
-    )
   }
 
   // Validate that all given permission values exist in ALL_PERMISSIONS

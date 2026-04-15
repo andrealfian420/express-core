@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs')
 const cacheService = require('../../services/cache.service')
 const { makeUniqueSlug } = require('../../utils/sluggable')
 const systemService = require('../../services/system.service')
+const prisma = require('../../config/database')
 
 const USER_CACHE_TTL = 300 // 5 minutes
 const slugCacheKey = (slug) => `user:slug:${slug}`
@@ -41,29 +42,38 @@ class UserService {
   }
 
   async createUser(data, createdBy = null) {
-    const existingUser = await userRepository.findByEmail(data.email)
-    if (existingUser) {
-      throw new AppError('Email already in use', 400)
-    }
+    // Use transaction to ensure user creation and activity logging are atomic
+    const user = await prisma.$transaction(async (tx) => {
+      const existingUser = await userRepository.findByEmail(data.email, tx)
+      if (existingUser) {
+        throw new AppError('Email already in use', 400)
+      }
 
-    const slug = await makeUniqueSlug(data.name, (candidate, excludeId) =>
-      userRepository.findBySlugExcluding(candidate, excludeId),
-    )
+      const slug = await makeUniqueSlug(data.name, (candidate, excludeId) =>
+        userRepository.findBySlugExcluding(candidate, excludeId, tx),
+      )
 
-    data.password = await bcrypt.hash(data.password, 12)
+      const hashedPassword = await bcrypt.hash(data.password, 12)
 
-    const user = await userRepository.create({ ...data, slug })
+      const newUser = await userRepository.create(
+        { ...data, slug, password: hashedPassword },
+        tx,
+      )
 
-    // Log activity
-    await systemService.logActivity(
-      createdBy,
-      'CREATE',
-      'User',
-      user.id,
-      `User created: ${user.name}`,
-      null,
-      { email: user.email, name: user.name, slug: user.slug },
-    )
+      // Log activity within transaction
+      await systemService.logActivity(
+        createdBy,
+        'CREATE',
+        'User',
+        newUser.id,
+        `User created: ${newUser.name}`,
+        null,
+        { email: newUser.email, name: newUser.name, slug: newUser.slug },
+        tx,
+      )
+
+      return newUser
+    })
 
     return user
   }
@@ -77,50 +87,60 @@ class UserService {
       if (existing) throw new AppError('Email already in use', 400)
     }
 
-    // onUpdate: regenerate slug whenever name changes
-    let newSlug
-    if (data.name && data.name !== user.name) {
-      newSlug = await makeUniqueSlug(
-        data.name,
-        (candidate, excludeId) =>
-          userRepository.findBySlugExcluding(candidate, excludeId),
-        user.id,
-      )
-    }
+    // Use transaction to ensure user update and activity logging are atomic
+    const updated = await prisma.$transaction(async (tx) => {
+      // onUpdate: regenerate slug whenever name changes
+      let newSlug
+      if (data.name && data.name !== user.name) {
+        newSlug = await makeUniqueSlug(
+          data.name,
+          (candidate, excludeId) =>
+            userRepository.findBySlugExcluding(candidate, excludeId, tx),
+          user.id,
+        )
+      }
 
-    const updated = await userRepository.update(user.id, {
-      ...(data.name && { name: data.name }),
-      ...(newSlug && { slug: newSlug }),
-      ...(data.email && { email: data.email }),
-      ...(data.roleId !== undefined && { roleId: data.roleId }),
+      const updatedUser = await userRepository.update(
+        user.id,
+        {
+          ...(data.name && { name: data.name }),
+          ...(newSlug && { slug: newSlug }),
+          ...(data.email && { email: data.email }),
+          ...(data.roleId !== undefined && { roleId: data.roleId }),
+        },
+        tx,
+      )
+
+      // Log activity within transaction
+      await systemService.logActivity(
+        updatedBy,
+        'UPDATE',
+        'User',
+        user.id,
+        `User updated: ${updatedUser.name}`,
+        {
+          name: user.name,
+          email: user.email,
+          slug: user.slug,
+          roleId: user.roleId,
+        },
+        {
+          name: updatedUser.name,
+          email: updatedUser.email,
+          slug: updatedUser.slug,
+          roleId: updatedUser.roleId,
+        },
+        tx,
+      )
+
+      return updatedUser
     })
 
-    // Invalidate old slug cache
+    // Invalidate caches AFTER transaction succeeds
     await cacheService.del(slugCacheKey(slug))
     // If slug changed, the new one will be populated on next request
     // Invalidate RBAC cache so role changes take effect immediately
     await cacheService.del(`user-role:${user.id}`)
-
-    // Log activity
-    await systemService.logActivity(
-      updatedBy,
-      'UPDATE',
-      'User',
-      user.id,
-      `User updated: ${updated.name}`,
-      {
-        name: user.name,
-        email: user.email,
-        slug: user.slug,
-        roleId: user.roleId,
-      },
-      {
-        name: updated.name,
-        email: updated.email,
-        slug: updated.slug,
-        roleId: updated.roleId,
-      },
-    )
 
     return updated
   }
