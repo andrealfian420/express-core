@@ -15,6 +15,7 @@ const xssMiddleware = require('./middleware/xss.middleware')
 require('dotenv').config()
 
 const routes = require('./routes')
+const cookieParser = require('cookie-parser')
 
 const app = express()
 app.set('trust proxy', 1)
@@ -57,6 +58,7 @@ app.use(hpp())
 app.use(express.urlencoded({ limit: process.env.FORMLIMIT, extended: true })) // for parsing application/x-www-form-urlencoded
 app.use(express.json({ limit: process.env.FORMLIMIT }))
 app.use(xssMiddleware)
+app.use(cookieParser())
 
 if (process.env.ENABLELOG) {
   // log success responses to access.log

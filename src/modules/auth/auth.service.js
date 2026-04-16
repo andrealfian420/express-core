@@ -106,7 +106,13 @@ class AuthService {
     return { accessToken, refreshToken }
   }
 
-  async refreshToken(token) {
+  async refreshToken(req) {
+    const token = req.cookies.refreshToken || req.body.refreshToken
+
+    if (!token) {
+      throw new AppError('Refresh token required', 400)
+    }
+
     const record = await authRepository.findRefreshToken(token)
 
     if (!record) {
@@ -229,8 +235,16 @@ class AuthService {
         Number(process.env.BCRYPT_ROUNDS),
       )
 
-      await userRepository.update(record.userId, { password: hashedPassword }, tx)
-      await authRepository.updatePasswordResetToken(token, { usedAt: new Date() }, tx)
+      await userRepository.update(
+        record.userId,
+        { password: hashedPassword },
+        tx,
+      )
+      await authRepository.updatePasswordResetToken(
+        token,
+        { usedAt: new Date() },
+        tx,
+      )
 
       return record.userId
     })
