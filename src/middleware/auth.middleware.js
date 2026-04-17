@@ -10,16 +10,9 @@ module.exports = (req, res, next) => {
     token = authHeader.split(' ')[1]
   }
 
-  // Fallback to accessToken cookie if no Authorization header
-  if (!token && req.cookies?.accessToken) {
-    token = req.cookies.accessToken
-  }
-
   if (!token) {
     throw new AppError('Unauthorized', 401)
   }
-
-  console.log(token)
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET)

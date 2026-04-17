@@ -106,27 +106,42 @@ class AuthService {
     return { accessToken, refreshToken }
   }
 
-  async refreshToken(req) {
-    const token = req.cookies.refreshToken || req.body.refreshToken
-
+  async refreshAccessToken(token) {
     if (!token) {
-      throw new AppError('Refresh token required', 400)
+      throw new AppError('Refresh token required', 401)
     }
 
-    const record = await authRepository.findRefreshToken(token)
+    // Use transaction to ensure token rotation is atomic (delete old token and create new one)
+    return await prisma.$transaction(async (tx) => {
+      const record = await authRepository.findRefreshToken(token, tx)
 
-    if (!record) {
-      throw new AppError('Invalid refresh token', 401)
-    }
+      if (!record) {
+        throw new AppError('Invalid refresh token', 401)
+      }
 
-    if (record.expiresAt < new Date()) {
-      await authRepository.deleteRefreshToken(token)
-      throw new AppError('Refresh token expired', 401)
-    }
+      if (record.expiresAt < new Date()) {
+        await authRepository.deleteRefreshToken(token, tx)
+        throw new AppError('Refresh token expired', 401)
+      }
 
-    const accessToken = generateAccessToken({ id: record.userId })
+      // Rotate refresh token: delete old one and create a new one
+      const newRefreshToken = generateToken()
+      await authRepository.deleteRefreshToken(token, tx)
+      await authRepository.createRefreshToken(
+        {
+          token: newRefreshToken,
+          userId: record.userId,
+          expiresAt: new Date(
+            Date.now() + process.env.REFRESH_TOKEN_EXPIRES_DAYS * 86400000,
+          ),
+        },
+        tx,
+      )
 
-    return { accessToken }
+      const accessToken = generateAccessToken({ id: record.userId })
+
+      return { accessToken, refreshToken: newRefreshToken }
+    })
   }
 
   async logout(token) {
