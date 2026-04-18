@@ -6,9 +6,6 @@ const { makeUniqueSlug } = require('../../utils/sluggable')
 const systemService = require('../../services/system.service')
 const prisma = require('../../config/database')
 
-const USER_CACHE_TTL = 300 // 5 minutes
-const slugCacheKey = (slug) => `user:slug:${slug}`
-
 // UserService contains business logic related to users.
 class UserService {
   async getUsers(req) {
@@ -16,27 +13,21 @@ class UserService {
   }
 
   async getUserBySlug(slug) {
-    const cacheKey = slugCacheKey(slug)
-    const cached = await cacheService.get(cacheKey)
-    if (cached) return cached
-
     const user = await userRepository.find(slug)
-    if (!user) throw new AppError('User not found', 404)
 
-    await cacheService.set(cacheKey, user, USER_CACHE_TTL)
+    if (!user) {
+      throw new AppError('User not found', 404)
+    }
+
     return user
   }
 
   async getUserByEmail(email) {
-    const cacheKey = `user:email:${email}`
-    const cachedUser = await cacheService.get(cacheKey)
-
-    if (cachedUser) {
-      return cachedUser
-    }
-
     const user = await userRepository.findByEmail(email)
-    await cacheService.set(cacheKey, user, USER_CACHE_TTL)
+
+    if (!user) {
+      throw new AppError('User not found', 404)
+    }
 
     return user
   }
@@ -80,11 +71,16 @@ class UserService {
 
   async updateUser(slug, data, updatedBy = null) {
     const user = await userRepository.find(slug)
-    if (!user) throw new AppError('User not found', 404)
+    if (!user) {
+      throw new AppError('User not found', 404)
+    }
 
     if (data.email && data.email !== user.email) {
       const existing = await userRepository.findByEmail(data.email)
-      if (existing) throw new AppError('Email already in use', 400)
+
+      if (existing) {
+        throw new AppError('Email already in use', 400)
+      }
     }
 
     // Use transaction to ensure user update and activity logging are atomic
@@ -136,8 +132,6 @@ class UserService {
       return updatedUser
     })
 
-    // Invalidate caches AFTER transaction succeeds
-    await cacheService.del(slugCacheKey(slug))
     // If slug changed, the new one will be populated on next request
     // Invalidate RBAC cache so role changes take effect immediately
     await cacheService.del(`user-role:${user.id}`)

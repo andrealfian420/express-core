@@ -6,7 +6,6 @@ const { makeUniqueSlug } = require('../../utils/sluggable')
 const systemService = require('../../services/system.service')
 const prisma = require('../../config/database')
 
-const CACHE_TTL = 300 // 5 minutes
 const cacheKey = (id) => `role:${id}`
 
 // Service layer for Role management
@@ -16,17 +15,11 @@ class RoleService {
   }
 
   async getRole(slug) {
-    const cached = await cacheService.get(cacheKey(slug))
-    if (cached) {
-      return cached
-    }
-
     const role = await roleRepository.findBySlug(slug)
     if (!role) {
       throw new AppError('Role not found', 404)
     }
 
-    await cacheService.set(cacheKey(slug), role, CACHE_TTL)
     return role
   }
 
@@ -136,6 +129,7 @@ class RoleService {
     const userIds = await cacheService.smembers(`role-users:${role.id}`)
     for (const userId of userIds) {
       await cacheService.del(`user-role:${userId}`)
+      await cacheService.del(`profile:${userId}`) // also invalidate profile cache since it contains role info
     }
 
     await cacheService.del(`role-users:${role.id}`)
@@ -176,7 +170,6 @@ class RoleService {
     })
 
     // Clear caches AFTER transaction succeeds
-    await cacheService.del(cacheKey(role.slug))
     await cacheService.smembers(`role-users:${role.id}`).then((userIds) => {
       userIds.forEach(
         async (userId) => await cacheService.del(`user-role:${userId}`),
