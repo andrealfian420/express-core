@@ -60,6 +60,7 @@ class UserService {
       const newUser = await userRepository.create(
         {
           ...data,
+          isEmailVerified: true,
           slug,
           password: hashedPassword,
           roleId: parseInt(data.roleId),
