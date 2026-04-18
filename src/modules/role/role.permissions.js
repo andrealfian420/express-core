@@ -44,15 +44,15 @@ const ACCESS_LIST = [
     module: 'History',
     sub_module: [
       {
-        module: 'Activity History',
+        module: 'Activity Log',
         activities: [
           {
-            label: 'Menu Activity History',
-            value: 'module.log-activity.index',
+            label: 'Menu Activity Log',
+            value: 'module.activity-log.index',
           },
           {
-            label: 'Activity History Details',
-            value: 'module.log-activity.detail',
+            label: 'Activity Log Details',
+            value: 'module.activity-log.detail',
           },
         ],
       },
@@ -79,9 +79,9 @@ const PERMISSIONS = {
       DELETE: 'module.master-data.user.delete',
     },
   },
-  LOG_ACTIVITY: {
-    INDEX: 'module.log-activity.index',
-    DETAIL: 'module.log-activity.detail',
+  ACTIVITY_LOG: {
+    INDEX: 'module.activity-log.index',
+    DETAIL: 'module.activity-log.detail',
   },
 }
 

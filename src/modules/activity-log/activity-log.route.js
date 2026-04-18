@@ -9,19 +9,19 @@ router.use(authMiddleware)
 
 router.get(
   '/',
-  checkPermission(PERMISSIONS.LOG_ACTIVITY.INDEX),
+  checkPermission(PERMISSIONS.ACTIVITY_LOG.INDEX),
   activityLogController.index,
 )
 
 router.get(
   '/:id',
-  checkPermission(PERMISSIONS.LOG_ACTIVITY.DETAIL),
+  checkPermission(PERMISSIONS.ACTIVITY_LOG.DETAIL),
   activityLogController.show,
 )
 
 router.get(
   '/user/:userId',
-  checkPermission(PERMISSIONS.LOG_ACTIVITY.INDEX),
+  checkPermission(PERMISSIONS.ACTIVITY_LOG.INDEX),
   activityLogController.getUserLogs,
 )
 
