@@ -19,6 +19,11 @@ class UserService {
       throw new AppError('User not found', 404)
     }
 
+    if (user.avatar) {
+      const appUrl = `${process.env.APP_URL}${process.env.PORT}`
+      user.avatarUrl = `${appUrl}/storage/uploads/avatars/${user.avatar}`
+    }
+
     return user
   }
 

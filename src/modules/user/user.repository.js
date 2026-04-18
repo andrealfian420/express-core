@@ -41,6 +41,15 @@ class UserRepository {
     const db = txOrPrisma || prisma
     return await db.user.findFirst({
       where: { slug, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        email: true,
+        isEmailVerified: true,
+        avatar: true,
+        roleId: true,
+      },
     })
   }
 
