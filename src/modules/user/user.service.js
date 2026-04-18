@@ -81,6 +81,7 @@ class UserService {
           name: newUser.name,
           slug: newUser.slug,
           roleId: newUser.roleId,
+          avatar: newUser.avatar,
         },
         tx,
       )
@@ -156,12 +157,14 @@ class UserService {
           email: user.email,
           slug: user.slug,
           roleId: user.roleId,
+          avatar: user.avatar,
         },
         {
           name: updatedUser.name,
           email: updatedUser.email,
           slug: updatedUser.slug,
           roleId: updatedUser.roleId,
+          avatar: updatedUser.avatar,
         },
         tx,
       )
