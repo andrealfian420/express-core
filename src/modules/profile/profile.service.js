@@ -19,7 +19,7 @@ class ProfileService {
       throw new AppError('Profile not found', 404)
     }
 
-    await cacheService.set(cacheKey, profile, 300) // cache for 5 minutes
+    await cacheService.set(cacheKey, profile, 900) // cache for 15 minutes
 
     return profile
   }
@@ -42,7 +42,7 @@ class ProfileService {
     await cacheService.del(`profile:${userId}`) // invalidate cache
 
     const cacheKey = `profile:${userId}`
-    await cacheService.set(cacheKey, updatedProfile, 300) // cache for 5 minutes
+    await cacheService.set(cacheKey, updatedProfile, 900) // cache for 15 minutes
 
     // Log activity
     await systemService.logActivity(
