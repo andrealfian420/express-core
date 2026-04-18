@@ -14,14 +14,30 @@ class ActivityLogRepository {
           action: true,
           description: true,
           subjectType: true,
+          oldData: true,
+          newData: true,
           subjectId: true,
           createdAt: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
         },
         searchFields: ['action', 'description', 'subjectType'],
-        allowedSorts: ['action', 'createdAt'],
+        allowedSorts: ['createdAt', 'action'],
 
         // optional transform function to modify each data item before returning
         transform: (log) => ({
+          actionType: log.action,
+          causedAt: log.createdAt.toLocaleString('en-GB', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }), // format as j F Y H:i
           ...log,
         }),
       },
@@ -43,6 +59,12 @@ class ActivityLogRepository {
         oldData: true,
         newData: true,
         createdAt: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     })
   }
@@ -60,9 +82,28 @@ class ActivityLogRepository {
           subjectType: true,
           subjectId: true,
           createdAt: true,
+          oldData: true,
+          newData: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
         },
         searchFields: ['action', 'description', 'subjectType'],
         allowedSorts: ['action', 'createdAt'],
+        transform: (log) => ({
+          actionType: log.action,
+          causedAt: log.createdAt.toLocaleString('en-GB', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }), // format as j F Y H:i
+          ...log,
+        }),
       },
       req,
     )

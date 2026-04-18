@@ -41,6 +41,7 @@ model User {
   refreshTokens        RefreshToken[]
   emailVerifications   EmailVerificationToken[]
   passwordResets       PasswordResetToken[]
+  activityLogs         ActivityLog[]
 
   @@map("users")
   @@index([deletedAt])
@@ -98,6 +99,8 @@ model ActivityLog {
   newData       Json      @default("[]") @map("new_data")
   createdAt     DateTime  @default(now()) @map("created_at")
   deletedAt     DateTime? @map("deleted_at")
+
+  user          User?   @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@map("activity_logs")

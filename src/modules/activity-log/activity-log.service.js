@@ -12,6 +12,15 @@ class ActivityLogService {
     if (!activityLog) {
       throw new AppError('Activity log not found', 404)
     }
+
+    activityLog.causedAt = activityLog.createdAt.toLocaleString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }) // format as j F Y H:i
+
     return activityLog
   }
 
