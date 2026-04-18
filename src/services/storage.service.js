@@ -8,7 +8,12 @@ class StorageService {
   }
 
   deleteFile(folder, filename) {
-    const filePath = path.join(__dirname, 'uploads', folder, filename)
+    const filePath = path.join(
+      process.cwd(),
+      'client/storage/public/uploads',
+      folder,
+      filename,
+    )
 
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath)
@@ -16,7 +21,12 @@ class StorageService {
   }
 
   fileExists(folder, filename) {
-    const filePath = path.join(__dirname, 'uploads', folder, filename)
+    const filePath = path.join(
+      process.cwd(),
+      'client/storage/public/uploads',
+      folder,
+      filename,
+    )
 
     return fs.existsSync(filePath)
   }

@@ -4,6 +4,7 @@
  * @param {object}   model                  - Prisma delegate  (e.g. prisma.user)
  * @param {object}   options
  * @param {object}   options.where          - Base Prisma where clause (always applied)
+ * @param {object}   [options.whereNot]     - Prisma NOT clause to exclude records
  * @param {object}   [options.select]       - Prisma select clause
  * @param {object}   [options.include]      - Prisma include clause
  * @param {string[]} [options.searchFields] - Model fields to search with ILIKE
@@ -15,6 +16,7 @@
 const paginate = async (model, options = {}, req) => {
   const {
     where: baseWhere = {},
+    whereNot,
     select,
     include,
     searchFields = [],
@@ -32,12 +34,17 @@ const paginate = async (model, options = {}, req) => {
     : allowedSorts[0]
   const sortDir = query.sort_dir === 'asc' ? 'asc' : 'desc'
 
+  // Merge whereNot into the base where clause
+  const baseWhereWithNot = whereNot
+    ? { ...baseWhere, NOT: whereNot }
+    : baseWhere
+
   // Merge full-text search into the base where clause
   const finalWhere =
     search && searchFields.length > 0
       ? {
           AND: [
-            baseWhere,
+            baseWhereWithNot,
             {
               OR: searchFields.map((field) => ({
                 [field]: { contains: search, mode: 'insensitive' },
@@ -45,7 +52,7 @@ const paginate = async (model, options = {}, req) => {
             },
           ],
         }
-      : baseWhere
+      : baseWhereWithNot
 
   const skip = (page - 1) * perPage
 

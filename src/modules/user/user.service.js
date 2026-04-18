@@ -5,6 +5,7 @@ const cacheService = require('../../services/cache.service')
 const { makeUniqueSlug } = require('../../utils/sluggable')
 const systemService = require('../../services/system.service')
 const prisma = require('../../config/database')
+const storageService = require('../../services/storage.service')
 
 // UserService contains business logic related to users.
 class UserService {
@@ -20,8 +21,10 @@ class UserService {
     }
 
     if (user.avatar) {
-      const appUrl = `${process.env.APP_URL}${process.env.PORT}`
-      user.avatarUrl = `${appUrl}/storage/uploads/avatars/${user.avatar}`
+      user.avatarUrl = storageService.getPublicUrl(
+        '/uploads/avatars',
+        user.avatar,
+      )
     }
 
     return user
@@ -49,10 +52,18 @@ class UserService {
         userRepository.findBySlugExcluding(candidate, excludeId, tx),
       )
 
-      const hashedPassword = await bcrypt.hash(data.password, 12)
+      const hashedPassword = await bcrypt.hash(
+        data.password,
+        parseInt(process.env.BCRYPT_ROUNDS),
+      )
 
       const newUser = await userRepository.create(
-        { ...data, slug, password: hashedPassword },
+        {
+          ...data,
+          slug,
+          password: hashedPassword,
+          roleId: parseInt(data.roleId),
+        },
         tx,
       )
 
@@ -64,7 +75,12 @@ class UserService {
         newUser.id,
         `User created: ${newUser.name}`,
         null,
-        { email: newUser.email, name: newUser.name, slug: newUser.slug },
+        {
+          email: newUser.email,
+          name: newUser.name,
+          slug: newUser.slug,
+          roleId: newUser.roleId,
+        },
         tx,
       )
 
@@ -101,13 +117,28 @@ class UserService {
         )
       }
 
+      // Handle avatar: delete old file if a new one is uploaded
+      if (data.avatar && user.avatar) {
+        storageService.deleteFile('avatars', user.avatar)
+      }
+
+      // Hash new password if provided
+      if (data.password) {
+        data.password = await bcrypt.hash(
+          data.password,
+          parseInt(process.env.BCRYPT_ROUNDS),
+        )
+      }
+
       const updatedUser = await userRepository.update(
         user.id,
         {
           ...(data.name && { name: data.name }),
           ...(newSlug && { slug: newSlug }),
           ...(data.email && { email: data.email }),
-          ...(data.roleId !== undefined && { roleId: data.roleId }),
+          ...(data.roleId && { roleId: parseInt(data.roleId) }),
+          ...(data.avatar && { avatar: data.avatar }),
+          ...(data.password && { password: data.password }),
         },
         tx,
       )
@@ -142,6 +173,42 @@ class UserService {
     await cacheService.del(`user-role:${user.id}`)
 
     return updated
+  }
+
+  async deleteUser(slug, deletedBy = null) {
+    const user = await userRepository.find(slug)
+    if (!user) {
+      throw new AppError('User not found', 404)
+    }
+
+    if (user.avatar) {
+      storageService.deleteFile('avatars', user.avatar)
+    }
+
+    // Use transaction to ensure user deletion and activity logging are atomic
+    await prisma.$transaction(async (tx) => {
+      await userRepository.delete(user.id, tx)
+
+      // Log activity within transaction
+      await systemService.logActivity(
+        deletedBy,
+        'DELETE',
+        'User',
+        user.id,
+        `User deleted: ${user.name}`,
+        {
+          name: user.name,
+          email: user.email,
+          slug: user.slug,
+          roleId: user.roleId,
+        },
+        null,
+        tx,
+      )
+    })
+
+    // Invalidate RBAC cache so role changes take effect immediately
+    await cacheService.del(`user-role:${user.id}`)
   }
 }
 

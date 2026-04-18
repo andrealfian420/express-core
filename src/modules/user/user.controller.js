@@ -23,21 +23,39 @@ class UserController {
 
   async store(req, res, next) {
     try {
-      const user = await userService.createUser(req.body, req.user.sub)
+      const data = {
+        ...req.body,
+        ...(req.file && { avatar: req.file.filename }),
+      }
+      const user = await userService.createUser(data, req.user.sub)
+
       response(res, user, 'User created successfully', 201)
+    } catch (err) {
+      next(err)
+    } 
+  }
+
+  async update(req, res, next) {
+    try {
+      const data = {
+        ...req.body,
+        ...(req.file && { avatar: req.file.filename }),
+      }
+      const user = await userService.updateUser(
+        req.params.slug,
+        data,
+        req.user.sub,
+      )
+      response(res, user, 'User updated successfully')
     } catch (err) {
       next(err)
     }
   }
 
-  async update(req, res, next) {
+  async delete(req, res, next) {
     try {
-      const user = await userService.updateUser(
-        req.params.slug,
-        req.body,
-        req.user.sub,
-      )
-      response(res, user, 'User updated successfully')
+      await userService.deleteUser(req.params.slug, req.user.sub)
+      response(res, null, 'User deleted successfully')
     } catch (err) {
       next(err)
     }

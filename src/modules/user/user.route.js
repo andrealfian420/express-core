@@ -5,7 +5,14 @@ const validate = require('../../middleware/validate.middleware')
 const authMiddleware = require('../../middleware/auth.middleware')
 const checkPermission = require('../../middleware/rbac.middleware')
 const { PERMISSIONS } = require('../role/role.permissions')
+const { createUploader } = require('../../middleware/upload.middleware')
 const router = express.Router()
+
+const avatarUploader = createUploader(
+  'avatars',
+  ['image/jpeg', 'image/png', 'image/webp'],
+  2 * 1024 * 1024,
+)
 
 router.use(authMiddleware)
 
@@ -25,6 +32,7 @@ router.post(
   '/',
   [
     checkPermission(PERMISSIONS.DATA_MASTER.USER.CREATE),
+    avatarUploader.single('avatar'),
     validate(createUserSchema),
   ],
   userController.store,
@@ -34,9 +42,16 @@ router.put(
   '/:slug',
   [
     checkPermission(PERMISSIONS.DATA_MASTER.USER.EDIT),
+    avatarUploader.single('avatar'),
     validate(updateUserSchema),
   ],
   userController.update,
+)
+
+router.delete(
+  '/:slug',
+  checkPermission(PERMISSIONS.DATA_MASTER.USER.DELETE),
+  userController.delete,
 )
 
 module.exports = router
