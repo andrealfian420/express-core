@@ -3,6 +3,10 @@ const profileRepository = require('./profile.repository')
 const storageService = require('../../services/storage.service')
 const cacheService = require('../../services/cache.service')
 const systemService = require('../../services/system.service')
+const prisma = require('../../config/database')
+const userRepository = require('../user/user.repository')
+const { makeUniqueSlug } = require('../../utils/sluggable')
+const bcrypt = require('bcryptjs')
 
 class ProfileService {
   async getProfile(userId) {
@@ -17,6 +21,13 @@ class ProfileService {
 
     if (!profile) {
       throw new AppError('Profile not found', 404)
+    }
+
+    if (profile.avatar) {
+      profile.avatarUrl = storageService.getPublicUrl(
+        'uploads/avatars',
+        profile.avatar,
+      )
     }
 
     await cacheService.set(cacheKey, profile, 900) // cache for 15 minutes
@@ -37,38 +48,71 @@ class ProfileService {
       }
     }
 
-    const updatedProfile = await profileRepository.updateProfile(userId, data)
+    const updatedProfile = await prisma.$transaction(async (tx) => {
+      // onUpdate: regenerate slug whenever name changes
+      let newSlug
+      if (data.name && data.name !== existingProfile.name) {
+        newSlug = await makeUniqueSlug(
+          data.name,
+          (candidate, excludeId) =>
+            userRepository.findBySlugExcluding(candidate, excludeId, tx),
+          existingProfile.id,
+        )
+      }
 
-    await cacheService.del(`profile:${userId}`) // invalidate cache
+      let newPassword = ''
+      console.log(data.password)
+      if (data.password) {
+        newPassword = await bcrypt.hash(
+          data.password,
+          parseInt(process.env.BCRYPT_ROUNDS),
+        )
 
-    const cacheKey = `profile:${userId}`
-    await cacheService.set(cacheKey, updatedProfile, 900) // cache for 15 minutes
+        console.log(`Hashed password: ${newPassword}`)
+      }
 
-    // Log activity
-    await systemService.logActivity(
-      userId,
-      'UPDATE',
-      'Profile',
-      userId,
-      'Profile updated',
-      {
-        name: existingProfile.name,
-        email: existingProfile.email,
-        avatar: existingProfile.avatar,
-      },
-      {
-        name: updatedProfile.name,
-        email: updatedProfile.email,
-        avatar: updatedProfile.avatar,
-      },
-    )
+      const updated = await profileRepository.updateProfile(
+        userId,
+        {
+          ...(data.name && { name: data.name }),
+          ...(newSlug && { slug: newSlug }),
+          ...(data.email && { email: data.email }),
+          ...(data.avatar && { avatar: data.avatar }),
+          ...(data.password && { password: newPassword }),
+        },
+        tx,
+      )
 
-    return {
-      ...updatedProfile,
-      avatarUrl: updatedProfile.avatar
-        ? storageService.getPublicUrl('avatars', updatedProfile.avatar)
-        : null,
-    }
+      await systemService.logActivity(
+        userId,
+        'UPDATE',
+        'Profile',
+        userId,
+        'Profile updated',
+        {
+          name: existingProfile.name,
+          email: existingProfile.email,
+          avatar: existingProfile.avatar,
+        },
+        {
+          name: updated.name,
+          email: updated.email,
+          avatar: updated.avatar,
+        },
+        tx,
+      )
+
+      return updated
+    })
+
+    cacheService.del(`profile:${userId}`) // Invalidate old cache
+
+    // Fetch profile data from sibling service to ensure we get the same data for caching and response
+    const newProfileData = await this.getProfile(updatedProfile.id)
+
+    cacheService.set(`profile:${userId}`, newProfileData, 900) // set new cache with new profile data
+
+    return newProfileData
   }
 }
 

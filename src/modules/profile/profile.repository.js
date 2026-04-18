@@ -1,8 +1,9 @@
 const prisma = require('../../config/database')
 
 class ProfileRepository {
-  async getProfile(userId) {
-    return await prisma.user.findFirst({
+  async getProfile(userId, txOrPrisma = null) {
+    const db = txOrPrisma || prisma
+    return await db.user.findFirst({
       where: {
         id: userId,
       },
@@ -21,8 +22,9 @@ class ProfileRepository {
     })
   }
 
-  async updateProfile(userId, data) {
-    return await prisma.user.update({
+  async updateProfile(userId, data, txOrPrisma = null) {
+    const db = txOrPrisma || prisma
+    return await db.user.update({
       where: {
         id: userId,
       },

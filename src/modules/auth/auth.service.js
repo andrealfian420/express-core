@@ -8,6 +8,7 @@ const { emailQueue } = require('../../jobs')
 const logger = require('../../config/logger')
 const { makeUniqueSlug } = require('../../utils/sluggable')
 const userRepository = require('../user/user.repository')
+const cacheService = require('../../services/cache.service')
 
 // This service contains the business logic for authentication-related operations.
 class AuthService {
@@ -145,6 +146,13 @@ class AuthService {
   }
 
   async logout(token) {
+    const record = await authRepository.findRefreshToken(token)
+
+    if (!record) {
+      throw new AppError('Invalid refresh token', 401)
+    }
+
+    cacheService.del(`profile:${record.userId}`) // Invalidate cached profile on logout
     await authRepository.deleteRefreshToken(token)
   }
 
