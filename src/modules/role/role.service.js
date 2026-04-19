@@ -55,6 +55,7 @@ class RoleService {
           title: newRole.title,
           userType: newRole.userType,
           slug: newRole.slug,
+          access: newRole.access,
         },
         tx,
       )
@@ -110,11 +111,17 @@ class RoleService {
         'Role',
         role.id,
         `Role updated: ${updatedRole.title}`,
-        { title: role.title, userType: role.userType, slug: role.slug },
+        {
+          title: role.title,
+          userType: role.userType,
+          slug: role.slug,
+          access: role.access,
+        },
         {
           title: updatedRole.title,
           userType: updatedRole.userType,
           slug: updatedRole.slug,
+          access: updatedRole.access,
         },
         tx,
       )
@@ -163,7 +170,12 @@ class RoleService {
         'Role',
         role.id,
         `Role deleted: ${role.title}`,
-        { title: role.title, userType: role.userType, slug: role.slug },
+        {
+          title: role.title,
+          userType: role.userType,
+          slug: role.slug,
+          access: role.access,
+        },
         null,
         tx,
       )
