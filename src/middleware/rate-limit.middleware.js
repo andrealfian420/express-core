@@ -46,6 +46,8 @@ const authRateLimiter = createRateLimiter({
   max: 50, // limit each IP to 50 requests per windowMs
 })
 
+// TODO: separate rate limiters for login, register, password reset, etc. with different limits and windows
+
 module.exports = {
   createRateLimiter,
   apiRateLimiter,
