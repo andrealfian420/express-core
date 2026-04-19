@@ -1,4 +1,4 @@
-# express-core
+# ExpressJS Api Boilerplate
 
 A production-ready modular **Express.js** REST API boilerplate. Packed with JWT authentication, background email queuing (BullMQ), Prisma ORM (PostgreSQL), Redis, and multiple security layers.
 
@@ -99,11 +99,13 @@ Then fill in the appropriate values in your `.env` file:
 
 ```env
 APP_NAME="App Name"
+APP_URL=http://localhost:
 NODE_ENV=development
 PORT=3000
 
-ENABLECORS=false
-ENABLEHELMET=false
+# Comma-separated list of allowed origins for CORS
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+
 FORMLIMIT=52428800
 ENABLELOG=true
 
@@ -243,15 +245,19 @@ npm run dev
 
 ### Production Mode
 
-```bash
-# Start the main server
-npm start
+In production, both the API server and BullMQ workers must run as separate processes. Use the included PM2 ecosystem config:
 
-# Start the worker in a separate process/terminal
-node src/jobs/run-workers.js
+```bash
+pm2 start ecosystem.config.js --env production
 ```
 
-> **Note:** In production, run the worker as a separate process (e.g. with PM2) so the email queue continues to operate independently from the main server.
+To reload without downtime after a deployment:
+
+```bash
+pm2 reload ecosystem.config.js --env production
+```
+
+> **Note:** The API server runs in `cluster` mode (utilizes all CPU cores) and the worker runs in `fork` mode (BullMQ concurrency handles parallelism internally).
 
 ---
 
@@ -266,23 +272,27 @@ Base URL: `http://localhost:3000/api/v1`
 | POST   | `/auth/register`               | Register a new user                   |
 | POST   | `/auth/login`                  | Login, returns access & refresh token |
 | POST   | `/auth/logout`                 | Logout (requires authentication)      |
-| POST   | `/auth/refresh-token`          | Renew access token                    |
+| POST   | `/auth/refresh`                | Renew access token via refresh cookie |
 | GET    | `/auth/verify-email`           | Verify email via token                |
 | POST   | `/auth/request-password-reset` | Send password reset email             |
 | POST   | `/auth/reset-password`         | Reset password with token             |
 
-### User _(requires authentication)_
+### User _(requires authentication + permission)_
 
-| Method | Endpoint | Description       |
-| ------ | -------- | ----------------- |
-| GET    | `/users` | List all users    |
-| POST   | `/users` | Create a new user |
+| Method | Endpoint       | Description       |
+| ------ | -------------- | ----------------- |
+| GET    | `/users`       | List all users    |
+| GET    | `/users/:slug` | Get user by slug  |
+| POST   | `/users`       | Create a new user |
+| PUT    | `/users/:slug` | Update a user     |
+| DELETE | `/users/:slug` | Delete a user     |
 
 ### Profile _(requires authentication)_
 
-| Method | Endpoint   | Description                      |
-| ------ | ---------- | -------------------------------- |
-| GET    | `/profile` | Get the logged-in user's profile |
+| Method | Endpoint   | Description                         |
+| ------ | ---------- | ----------------------------------- |
+| GET    | `/profile` | Get the logged-in user's profile    |
+| PUT    | `/profile` | Update the logged-in user's profile |
 
 ### Health
 
@@ -302,4 +312,4 @@ npm run lint
 
 ## License
 
-Copyright &copy; 2026 Alfian Andre Ramadhan. All rights reserved.
+Copyright &copy; 2026 - Present Alfian Andre Ramadhan. All rights reserved.
