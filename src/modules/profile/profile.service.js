@@ -83,7 +83,7 @@ class ProfileService {
 
       // invalidate all existing refresh tokens for the user to force logout
       // from all devices if password is changed
-      if (data.password || newPassword.length) {
+      if (data.password && newPassword.length) {
         await authRepository.deleteRefreshTokensByUserId(userId, tx)
       }
 
