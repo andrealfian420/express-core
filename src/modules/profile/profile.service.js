@@ -92,7 +92,7 @@ class ProfileService {
         'UPDATE',
         'Profile',
         userId,
-        'Profile updated',
+        'User updated their profile',
         {
           name: existingProfile.name,
           email: existingProfile.email,
