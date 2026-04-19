@@ -5,6 +5,7 @@ const updateProfileSchema = z.object({
   email: z.email('Invalid email address').optional(),
   avatar: z.string().optional(), // file upload
   password: z
+    .string()
     .refine((val) => {
       if (!val) {
         return true // allow empty password (no change)
