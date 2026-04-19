@@ -19,7 +19,7 @@ async function main() {
       where: { id: superAdminRole.id },
       data: {
         title: 'Super Administrator',
-        userType: 'super_admin',
+        userType: 'Administrator',
         description: 'Full access to all modules',
         access: ALL_PERMISSIONS,
       },
@@ -29,7 +29,7 @@ async function main() {
       data: {
         slug: 'super-admin',
         title: 'Super Administrator',
-        userType: 'super_admin',
+        userType: 'Administrator',
         description: 'Full access to all modules',
         access: ALL_PERMISSIONS,
       },

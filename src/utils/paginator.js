@@ -31,7 +31,7 @@ const paginate = async (model, options = {}, req) => {
   const search = query.search?.trim() || null
   const sortBy = allowedSorts.includes(query.sort_by)
     ? query.sort_by
-    : allowedSorts[0]
+    : 'createdAt' // Default sort field
   const sortDir = query.sort_dir === 'asc' ? 'asc' : 'desc'
 
   // Merge whereNot into the base where clause
