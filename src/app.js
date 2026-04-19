@@ -8,7 +8,6 @@ const logConfig = require('./config/log')
 const corsConfig = require('./config/cors')
 const helmetConfig = require('./config/helmet')
 const errorHandler = require('./middleware/error.middleware')
-const { apiRateLimiter } = require('./middleware/rate-limit.middleware')
 const hpp = require('hpp')
 const xssMiddleware = require('./middleware/xss.middleware')
 
@@ -47,8 +46,6 @@ app.use((req, res, next) => {
     next()
   }
 })
-
-app.use('/api', apiRateLimiter)
 
 app.use(express.urlencoded({ limit: process.env.FORMLIMIT, extended: true })) // for parsing application/x-www-form-urlencoded
 app.use(express.json({ limit: process.env.FORMLIMIT }))
