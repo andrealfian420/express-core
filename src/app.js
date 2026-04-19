@@ -35,12 +35,8 @@ app.use(function (req, res, next) {
   next()
 })
 
-if (process.env.ENABLECORS) {
-  app.use(cors(corsConfig))
-}
-if (process.env.ENABLEHELMET) {
-  app.use(helmet(helmetConfig))
-}
+app.use(cors(corsConfig))
+app.use(helmet(helmetConfig))
 
 app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
@@ -57,8 +53,8 @@ app.use(hpp())
 
 app.use(express.urlencoded({ limit: process.env.FORMLIMIT, extended: true })) // for parsing application/x-www-form-urlencoded
 app.use(express.json({ limit: process.env.FORMLIMIT }))
-app.use(xssMiddleware)
 app.use(cookieParser())
+app.use(xssMiddleware)
 
 if (process.env.ENABLELOG) {
   // log success responses to access.log

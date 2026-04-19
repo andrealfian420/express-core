@@ -211,7 +211,6 @@ class UserService {
       )
     })
 
-    // Invalidate RBAC cache so role changes take effect immediately
     await cacheService.del(`user-role:${user.id}`)
   }
 }

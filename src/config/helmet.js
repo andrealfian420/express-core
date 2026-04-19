@@ -2,8 +2,8 @@ module.exports = {
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", 'http://localhost:*'],
-      styleSrc: ["'self'", "'unsafe-inline'", 'http://localhost:*'],
+      scriptSrc: ["'self'", 'http://localhost:*'],
+      styleSrc: ["'self'", 'http://localhost:*'],
       imgSrc: ["'self'", 'http://localhost:*'],
       fontSrc: ["'self'", 'http://localhost:*'],
       frameSrc: ["'self'", 'http://localhost:*'],

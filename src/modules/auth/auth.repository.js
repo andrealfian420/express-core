@@ -71,6 +71,15 @@ class AuthRepository {
       data: data,
     })
   }
+
+  async deleteRefreshTokensByUserId(userId, txOrPrisma = null) {
+    const db = txOrPrisma || prisma
+    return await db.refreshToken.deleteMany({
+      where: {
+        userId: userId,
+      },
+    })
+  }
 }
 
 module.exports = new AuthRepository()

@@ -10,9 +10,12 @@
  * @property {number} maxAge - Indicates how long the results of a preflight request can be cached.
  */
 require('dotenv').config()
+
+const origins = process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+
 module.exports = {
   origin: function (origin, callback) {
-    const allowedOrigins = [/^http:\/\/localhost:\d+$/]
+    const allowedOrigins = origins
     if (
       !origin ||
       allowedOrigins.some((o) =>

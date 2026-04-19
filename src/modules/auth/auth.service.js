@@ -78,12 +78,11 @@ class AuthService {
   async login(email, password) {
     const user = await authRepository.findUserByEmail(email)
 
-    if (!user) {
-      throw new AppError('Invalid email or password', 401)
-    }
-
-    if (!user.isEmailVerified) {
-      throw new AppError('Email not verified', 403)
+    if (!user || !user.isEmailVerified) {
+      throw new AppError(
+        'Unable to sign in. Please verify your credentials or activate your account first.',
+        401,
+      )
     }
 
     const isMatch = await bcrypt.compare(password, user.password)
@@ -152,7 +151,7 @@ class AuthService {
       throw new AppError('Invalid refresh token', 401)
     }
 
-    cacheService.del(`profile:${record.userId}`) // Invalidate cached profile on logout
+    await cacheService.del(`profile:${record.userId}`) // Invalidate cached profile on logout
     await authRepository.deleteRefreshToken(token)
   }
 
@@ -211,11 +210,11 @@ class AuthService {
     logger.info(`Email verified successfully for user: ${user.email}`)
   }
 
-  async forgotPassword(email) {
+  async requestPasswordReset(email) {
     const user = await authRepository.findUserByEmail(email)
 
     if (!user) {
-      throw new AppError('Email not found', 404)
+      return true // Don't reveal that the email doesn't exist
     }
 
     const token = generateToken()
@@ -268,6 +267,9 @@ class AuthService {
         { usedAt: new Date() },
         tx,
       )
+
+      // Invalidate all existing refresh tokens for the user to force logout from all devices
+      await authRepository.deleteRefreshTokensByUserId(record.userId, tx)
 
       return record.userId
     })

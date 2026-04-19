@@ -40,7 +40,14 @@ const apiRateLimiter = createRateLimiter({
   max: 1000, // limit each IP to 1000 requests per windowMs
 })
 
+// auth rate limiter with stricter options, can be used for authentication routes to prevent brute-force attacks
+const authRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // limit each IP to 5 requests per windowMs
+})
+
 module.exports = {
   createRateLimiter,
   apiRateLimiter,
+  authRateLimiter,
 }

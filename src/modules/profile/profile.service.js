@@ -7,6 +7,7 @@ const prisma = require('../../config/database')
 const userRepository = require('../user/user.repository')
 const { makeUniqueSlug } = require('../../utils/sluggable')
 const bcrypt = require('bcryptjs')
+const authRepository = require('../auth/auth.repository')
 
 class ProfileService {
   async getProfile(userId) {
@@ -61,14 +62,11 @@ class ProfileService {
       }
 
       let newPassword = ''
-      console.log(data.password)
       if (data.password) {
         newPassword = await bcrypt.hash(
           data.password,
           parseInt(process.env.BCRYPT_ROUNDS),
         )
-
-        console.log(`Hashed password: ${newPassword}`)
       }
 
       const updated = await profileRepository.updateProfile(
@@ -82,6 +80,12 @@ class ProfileService {
         },
         tx,
       )
+
+      // invalidate all existing refresh tokens for the user to force logout
+      // from all devices if password is changed
+      if (data.password || newPassword.length) {
+        await authRepository.deleteRefreshTokensByUserId(userId, tx)
+      }
 
       await systemService.logActivity(
         userId,
@@ -105,12 +109,12 @@ class ProfileService {
       return updated
     })
 
-    cacheService.del(`profile:${userId}`) // Invalidate old cache
+    await cacheService.del(`profile:${userId}`) // Invalidate old cache
 
     // Fetch profile data from sibling service to ensure we get the same data for caching and response
     const newProfileData = await this.getProfile(updatedProfile.id)
 
-    cacheService.set(`profile:${userId}`, newProfileData, 900) // set new cache with new profile data
+    await cacheService.set(`profile:${userId}`, newProfileData, 900) // set new cache with new profile data
 
     return newProfileData
   }

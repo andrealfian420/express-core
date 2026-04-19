@@ -8,6 +8,10 @@ const {
 } = require('./auth.validation')
 const validate = require('../../middleware/validate.middleware')
 const router = express.Router()
+const { authRateLimiter } = require('../../middleware/rate-limit.middleware')
+
+// apply the auth rate limiter to all routes in this router
+router.use(authRateLimiter)
 
 router.post('/register', validate(registerSchema), authController.register)
 router.post('/login', validate(loginSchema), authController.login)

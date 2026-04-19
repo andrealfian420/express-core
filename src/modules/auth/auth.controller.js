@@ -24,7 +24,7 @@ class AuthController {
       // Set refresh token in an HTTP-only cookie
       res.cookie('refreshToken', tokens.refreshToken, {
         httpOnly: true,
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // Use 'none' for production to allow cross-site cookies, 'lax' for development
+        sameSite: 'lax', // use 'lax' because our api are on the subdomain of the frontend, if you are using different domains, consider using 'none' and ensure secure is true
         secure: process.env.NODE_ENV === 'production', // Only set secure flag in production
         maxAge: process.env.REFRESH_TOKEN_EXPIRES_DAYS * 86400000, // expire in days
       })
@@ -33,7 +33,6 @@ class AuthController {
         res,
         {
           accessToken: tokens.accessToken, // Optional for mobile clients that can't use cookies
-          refreshToken: tokens.refreshToken, // Include refresh token in response body for mobile clients that can't use cookies
         },
         'Login successful',
       )
@@ -49,7 +48,7 @@ class AuthController {
 
       res.cookie('refreshToken', result.refreshToken, {
         httpOnly: true,
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // Use 'none' for production to allow cross-site cookies, 'lax' for development
+        sameSite: 'lax', // use 'lax' because our api are on the subdomain of the frontend, if you are using different domains, consider using 'none' and ensure secure is true
         secure: process.env.NODE_ENV === 'production', // Only set secure flag in production
         maxAge: process.env.REFRESH_TOKEN_EXPIRES_DAYS * 86400000,
       })
@@ -76,7 +75,7 @@ class AuthController {
   async requestPasswordReset(req, res, next) {
     try {
       await authService.requestPasswordReset(req.body.email)
-      response(res, null, 'Password reset email sent')
+      response(res, null, 'If email exists, a reset link has been sent')
     } catch (err) {
       next(err)
     }
@@ -99,7 +98,12 @@ class AuthController {
       }
 
       // Clear cookies
-      res.clearCookie('refreshToken')
+      res.clearCookie('refreshToken', {
+        httpOnly: true,
+        sameSite: 'lax', // use 'lax' because our api are on the subdomain of the frontend, if you are using different domains, consider using 'none' and ensure secure is true
+        secure: process.env.NODE_ENV === 'production', // Only set secure flag in production
+        maxAge: process.env.REFRESH_TOKEN_EXPIRES_DAYS * 86400000, // expire in days
+      })
 
       response(res, null, 'Logged out successfully')
     } catch (err) {
