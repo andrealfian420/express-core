@@ -37,13 +37,13 @@ const createRateLimiter = (options) => {
 // api rate limiter with default options, can be used for all API routes
 const apiRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // limit each IP to 1000 requests per windowMs
+  max: 100, // limit each IP to 100 requests per windowMs
 })
 
 // auth rate limiter with stricter options, can be used for authentication routes to prevent brute-force attacks
 const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 15, // limit each IP to 5 requests per windowMs
+  max: 50, // limit each IP to 50 requests per windowMs
 })
 
 module.exports = {
