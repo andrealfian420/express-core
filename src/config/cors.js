@@ -11,7 +11,10 @@
  */
 require('dotenv').config()
 
-const origins = process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+const origins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .filter(Boolean)
+  .map((o) => o.trim())
 
 module.exports = {
   origin: function (origin, callback) {
