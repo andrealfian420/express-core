@@ -1,4 +1,4 @@
-# ExpressJS Api Boilerplate
+# ExpressJS API Boilerplate
 
 A production-ready modular **Express.js** REST API boilerplate. Packed with JWT authentication, background email queuing (BullMQ), Prisma ORM (PostgreSQL), Redis, and multiple security layers.
 
