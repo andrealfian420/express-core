@@ -7,7 +7,6 @@ class ActivityLogRepository {
     return await paginate(
       prisma.activityLog,
       {
-        where: { deletedAt: null },
         select: {
           id: true,
           userId: true,
@@ -48,7 +47,7 @@ class ActivityLogRepository {
   async findById(id, txOrPrisma = null) {
     const db = txOrPrisma || prisma
     return await db.activityLog.findFirst({
-      where: { id, deletedAt: null },
+      where: { id },
       select: {
         id: true,
         userId: true,
@@ -73,7 +72,7 @@ class ActivityLogRepository {
     return await paginate(
       prisma.activityLog,
       {
-        where: { userId, deletedAt: null },
+        where: { userId },
         select: {
           id: true,
           userId: true,
