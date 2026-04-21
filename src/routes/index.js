@@ -1,9 +1,6 @@
 const express = require('express')
 const router = express.Router()
-const {
-  authRateLimiter,
-  apiRateLimiter,
-} = require('../middleware/rate-limit.middleware')
+const { apiRateLimiter } = require('../middleware/rate-limit.middleware')
 
 // Importing Routes
 const userRoutes = require('../modules/user/user.route')
@@ -14,8 +11,8 @@ const roleRoutes = require('../modules/role/role.route')
 const activityLogRoutes = require('../modules/activity-log/activity-log.route')
 const helperRoutes = require('../modules/helper/helper.route')
 
-// Apply specific rate limiter to auth routes to prevent brute-force attacks
-router.use('/auth', authRateLimiter, authRoutes)
+// Place auth routes before general API rate limiter to allow for more specific rate limits on auth endpoints
+router.use('/auth', authRoutes)
 
 // Apply general API rate limiter to all routes below
 router.use(apiRateLimiter)

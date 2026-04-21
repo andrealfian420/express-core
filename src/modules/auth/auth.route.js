@@ -1,19 +1,20 @@
 const express = require('express')
 const authController = require('./auth.controller')
+const router = express.Router()
+const validate = require('../../middleware/validate.middleware')
 const {
   registerSchema,
   loginSchema,
   requestPasswordResetSchema,
   resetPasswordSchema,
 } = require('./auth.validation')
-const validate = require('../../middleware/validate.middleware')
 const {
   loginRateLimiter,
   registerRateLimiter,
   requestPasswordResetRateLimiter,
   resetPasswordRateLimiter,
+  authRateLimiter,
 } = require('../../middleware/rate-limit.middleware')
-const router = express.Router()
 
 router.post(
   '/register',
@@ -26,9 +27,6 @@ router.post(
   [loginRateLimiter, validate(loginSchema)],
   authController.login,
 )
-router.post('/refresh', authController.refreshAccessToken)
-router.get('/verify-email', authController.verifyEmail)
-router.post('/logout', authController.logout)
 
 router.post(
   '/request-password-reset',
@@ -41,5 +39,10 @@ router.post(
   [resetPasswordRateLimiter, validate(resetPasswordSchema)],
   authController.resetPassword,
 )
+
+router.use(authRateLimiter) // Apply general auth rate limiter to all subsequent auth routes
+router.post('/refresh', authController.refreshAccessToken)
+router.get('/verify-email', authController.verifyEmail)
+router.post('/logout', authController.logout)
 
 module.exports = router
