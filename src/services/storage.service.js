@@ -4,7 +4,7 @@ const path = require('path')
 // This service provides methods to manage files in the storage, such as generating public URLs and deleting files.
 class StorageService {
   getPublicUrl(folder, filename) {
-    return `${process.env.APP_URL}${process.env.PORT}/storage/${folder}/${filename}`
+    return `${process.env.APP_URL}/storage/${folder}/${filename}`
   }
 
   deleteFile(folder, filename) {
