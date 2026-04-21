@@ -46,10 +46,38 @@ const authRateLimiter = createRateLimiter({
   max: 50, // limit each IP to 50 requests per windowMs
 })
 
-// TODO: separate rate limiters for login, register, password reset, etc. with different limits and windows
+// Specific rate limiters for individual auth endpoints
+
+// Login: strict limit to prevent brute-force attacks
+const loginRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // limit each IP to 10 login attempts per windowMs
+})
+
+// Register: moderate limit to prevent spam registrations
+const registerRateLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20, // limit each IP to 20 registrations per windowMs
+})
+
+// Request password reset: very strict to prevent email flooding
+const requestPasswordResetRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // limit each IP to 5 reset requests per windowMs
+})
+
+// Reset password: strict to prevent token brute-forcing
+const resetPasswordRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // limit each IP to 10 reset attempts per windowMs
+})
 
 module.exports = {
   createRateLimiter,
   apiRateLimiter,
   authRateLimiter,
+  loginRateLimiter,
+  registerRateLimiter,
+  requestPasswordResetRateLimiter,
+  resetPasswordRateLimiter,
 }
