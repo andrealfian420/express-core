@@ -37,16 +37,6 @@ app.use(function (req, res, next) {
 app.use(cors(corsConfig))
 app.use(helmet(helmetConfig))
 
-app.use((req, res, next) => {
-  if (req.method === 'OPTIONS') {
-    res.setHeader('Cache-Control', 'public, max-age=86400')
-    // No Vary required: cors sets it already set automatically
-    res.end()
-  } else {
-    next()
-  }
-})
-
 app.use(express.urlencoded({ limit: process.env.FORMLIMIT, extended: true })) // for parsing application/x-www-form-urlencoded
 app.use(express.json({ limit: process.env.FORMLIMIT }))
 app.use(hpp())

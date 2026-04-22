@@ -43,6 +43,9 @@ module.exports = {
 
   credentials: true,
 
+  // if true, the CORS preflight response will be passed to the next handler instead of ending the request
+  preflightContinue: false,
+
   optionsSuccessStatus: 200,
 
   maxAge: 86400,
