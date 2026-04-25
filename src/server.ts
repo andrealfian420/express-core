@@ -1,8 +1,8 @@
-const app = require('./app')
-const startCronJobs = require('./jobs/cron')
-const prisma = require('./config/database')
-const redis = require('./config/redis')
-const logger = require('./config/logger')
+import app from './app'
+import startCronJobs from './jobs/cron'
+import prisma from './config/database'
+import redis from './config/redis'
+import logger from './config/logger'
 
 startCronJobs()
 const PORT = process.env.PORT || 3001
@@ -36,12 +36,12 @@ async function gracefulShutdown() {
 process.on('SIGINT', gracefulShutdown)
 process.on('SIGTERM', gracefulShutdown)
 
-process.on('uncaughtException', (error) => {
+process.on('uncaughtException', (error: Error) => {
   logger.error('Uncaught Exception', { error })
   process.exit(1)
 })
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason: unknown, promise: Promise<any>) => {
   logger.error('Unhandled Rejection at:', { reason, promise })
 
   process.exit(1)

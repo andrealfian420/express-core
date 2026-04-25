@@ -219,3 +219,5 @@ $RECYCLE.BIN/
 /generated/prisma
 
 /client/storage/*
+
+.vscode/

@@ -1,8 +1,29 @@
-const AppError = require('../utils/appError')
-const prisma = require('../config/database')
-const cacheService = require('../services/cache.service')
+import { Request, Response, NextFunction } from 'express'
+import AppError from '../utils/appError'
+import prisma from '../config/database'
+import cacheService from '../services/cache.service'
 
 const USER_ROLE_CACHE_TTL = 300 // 5 minutes
+
+// Define a TypeScript interface for the role data structure
+interface RoleData {
+  id: string | number
+  slug: string
+  access: string[] // Array of permission strings
+}
+
+interface CachedUserData {
+  id: string | number
+  role: RoleData | null
+}
+
+export interface RBACRequest extends Request {
+  user?: {
+    sub: string | number
+    [key: string]: any
+  }
+  role?: RoleData
+}
 
 /**
  * RBAC middleware factory.
@@ -10,8 +31,8 @@ const USER_ROLE_CACHE_TTL = 300 // 5 minutes
  *
  * Relies on authMiddleware having already set req.user = { sub: userId }.
  */
-const checkPermission = (permission) => {
-  return async (req, res, next) => {
+const checkPermission = (permission: string) => {
+  return async (req: RBACRequest, res: Response, next: NextFunction) => {
     try {
       const userId = req.user?.sub
       if (!userId) {
@@ -19,10 +40,10 @@ const checkPermission = (permission) => {
       }
 
       const cacheKey = `user-role:${userId}`
-      let userData = await cacheService.get(cacheKey)
+      let userData: CachedUserData | null = await cacheService.get(cacheKey)
 
       if (!userData) {
-        userData = await prisma.user.findFirst({
+        userData = (await prisma.user.findFirst({
           where: { id: userId, deletedAt: null },
           select: {
             id: true,
@@ -34,7 +55,7 @@ const checkPermission = (permission) => {
               },
             },
           },
-        })
+        })) as unknown as CachedUserData | null // double casting to satisfy TypeScript
 
         if (!userData) {
           return next(new AppError('Unauthorized access', 401))
@@ -42,19 +63,21 @@ const checkPermission = (permission) => {
 
         await cacheService.set(cacheKey, userData, USER_ROLE_CACHE_TTL)
 
-        // Cache the role ID for quick invalidation when role permissions change
-        await cacheService.sadd(
-          `role-users:${userData.role.id}`,
-          userId,
-          USER_ROLE_CACHE_TTL,
-        )
+        if (userData.role) {
+          // Cache the role ID for quick invalidation when role permissions change
+          await cacheService.sadd(
+            `role-users:${userData.role.id}`,
+            userId,
+            USER_ROLE_CACHE_TTL,
+          )
+        }
       }
 
       if (!userData.role) {
         return next(new AppError('Access denied: no role assigned', 403))
       }
 
-      const grantedAccess = Array.isArray(userData.role.access)
+      const grantedAccess: string[] = Array.isArray(userData.role.access)
         ? userData.role.access
         : []
 
@@ -76,4 +99,4 @@ const checkPermission = (permission) => {
   }
 }
 
-module.exports = checkPermission
+export default checkPermission

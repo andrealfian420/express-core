@@ -1,21 +1,29 @@
-const rateLimit = require('express-rate-limit')
-const { RedisStore } = require('rate-limit-redis')
-const redis = require('../config/redis')
-const logger = require('../config/logger')
+import { Request, Response, NextFunction } from 'express'
+import rateLimit, { Options as RateLimitOptions } from 'express-rate-limit'
+import { RedisStore } from 'rate-limit-redis'
+import redis from '../config/redis'
+import logger from '../config/logger'
+
+// Create a custom interface for rate limit options
+// to allow for more specific typing and default values
+interface CustomRateLimitOptions {
+  windowMs?: number
+  max?: number
+}
 
 // this is a function that creates a rate limiter middleware with customizable options
 // Rate Limiters is used to limit the number of requests a client can make to the server in a given time window
-const createRateLimiter = (options) => {
+const createRateLimiter = (options: CustomRateLimitOptions) => {
   return rateLimit({
     // uses Redis to store rate limit data, which allows for distributed rate limiting across multiple server instances
     store: new RedisStore({
-      sendCommand: (...args) => redis.call(...args),
+      sendCommand: (...args: string[]) => redis.call(...args),
     }),
     windowMs: options.windowMs || 15 * 60 * 1000, // default 15 minutes
     max: options.max || 100, // default 100 requests per window
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    handler: (req, res, next, options) => {
+    handler: (req: Request, res: Response, next: NextFunction, optionsInfo: RateLimitOptions) => {
       // custom handler for when a client exceeds the rate limit
       logger.warn('Rate limit exceeded', {
         ip: req.ip || 'unknown',
@@ -26,7 +34,7 @@ const createRateLimiter = (options) => {
         // query: req.query || {},
       })
 
-      res.status(options.statusCode).json({
+      res.status(optionsInfo.statusCode || 429).json({
         success: false,
         message: 'Too many requests, please try again later.',
       })

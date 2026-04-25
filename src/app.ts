@@ -1,17 +1,18 @@
-const express = require('express')
-const cors = require('cors')
-const helmet = require('helmet')
-const compression = require('compression')
-const morgan = require('morgan')
-const { createWriteStream } = require('fs')
-const logConfig = require('./config/log')
-const corsConfig = require('./config/cors')
-const helmetConfig = require('./config/helmet')
-const errorHandler = require('./middleware/error.middleware')
-const hpp = require('hpp')
-const xssMiddleware = require('./middleware/xss.middleware')
+import express, {Request, Response, NextFunction} from 'express'
+import cors from 'cors'
+import helmet from 'helmet'
+import compression from 'compression'
+import morgan from 'morgan'
+import { createWriteStream } from 'fs'
+import logConfig from './config/log'
+import corsConfig from './config/cors'
+import helmetConfig from './config/helmet'
+import errorHandler from './middleware/error.middleware'
+import hpp from 'hpp'
+import xssMiddleware from './middleware/xss.middleware'
+import dotenv from 'dotenv'
 
-require('dotenv').config()
+dotenv.config()
 
 const routes = require('./routes')
 const cookieParser = require('cookie-parser')
@@ -29,7 +30,7 @@ if (process.env.NODE_ENV == 'production') {
   app.use(compression())
 }
 
-app.use(function (req, res, next) {
+app.use(function (req: Request, res: Response, next: NextFunction) {
   req.socket.setNoDelay(true)
   next()
 })
@@ -38,7 +39,7 @@ app.use(cors(corsConfig))
 app.use(helmet(helmetConfig))
 
 app.use(express.urlencoded({ limit: process.env.FORMLIMIT, extended: true })) // for parsing application/x-www-form-urlencoded
-app.use(express.json({ limit: process.env.FORMLIMIT }))
+app.use(express.json({ limit: process.env.FORMLIMIT || 52428800 }))
 app.use(hpp())
 app.use(cookieParser())
 app.use(xssMiddleware)
@@ -48,7 +49,7 @@ if (process.env.ENABLELOG) {
   if (process.env.NODE_ENV == 'development') {
     app.use(
       morgan(logConfig, {
-        skip: function (req, res) {
+        skip: function (req: Request, res: Response) {
           return !req.originalUrl.includes('api/v1') || res.statusCode >= 400
         },
         stream: createWriteStream('./client/storage/http-access.log', {
@@ -61,7 +62,7 @@ if (process.env.ENABLELOG) {
   // log 4xx and 5xx responses to error.log
   app.use(
     morgan(logConfig, {
-      skip: function (req, res) {
+      skip: function (req: Request, res: Response) {
         return !req.originalUrl.includes('api/v1') || res.statusCode < 400
       },
       stream: createWriteStream('./client/storage/http-error.log', {
@@ -75,4 +76,4 @@ app.use('/storage', express.static('./client/storage/public'))
 app.use('/api/v1/', routes)
 app.use(errorHandler)
 
-module.exports = app
+export default app
