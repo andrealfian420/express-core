@@ -1,4 +1,6 @@
-module.exports = {
+import { HelmetOptions } from 'helmet'
+
+const helmetConfig: HelmetOptions = {
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
@@ -22,3 +24,5 @@ module.exports = {
     policy: 'credentialless',
   },
 }
+
+export default helmetConfig

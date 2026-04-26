@@ -1,17 +1,10 @@
 const { PrismaClient } = require('@prisma/client')
 const { createSoftDeleteExtension } = require('prisma-extension-soft-delete')
 
-const globalForPrisma = global
-
-const basePrisma =
-  globalForPrisma.prisma ||
-  new PrismaClient({
+const prismaClientSingleton = () => {
+  return new PrismaClient({
     log: ['error', 'warn'],
-  })
-
-const prisma =
-  globalForPrisma.extendedPrisma ||
-  basePrisma.$extends(
+  }).$extends(
     createSoftDeleteExtension({
       models: {
         // enable soft delete for the these models
@@ -20,17 +13,26 @@ const prisma =
       },
       defaultConfig: {
         field: 'deletedAt',
-        createValue: (deleted) => {
-          if (deleted) return new Date()
+        createValue: (deleted: boolean) => {
+          if (deleted) {
+            return new Date()
+          }
+
           return null
         },
       },
     }),
   )
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = basePrisma
-  globalForPrisma.extendedPrisma = prisma
 }
 
-module.exports = prisma
+declare global {
+  var prismaGlobal: undefined | ReturnType<typeof prismaClientSingleton>
+}
+
+const prisma = globalThis.prismaGlobal ?? prismaClientSingleton()
+
+if (process.env.NODE_ENV !== 'production') {
+  globalThis.prismaGlobal = prisma
+}
+
+export default prisma
