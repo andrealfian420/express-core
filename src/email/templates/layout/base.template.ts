@@ -1,10 +1,10 @@
-function baseTemplate(content) {
+function baseTemplate(content: string): string {
   const html = `<!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>${process.env.APP_NAME}</title>
+      <title>${process.env.APP_NAME || 'App'}</title>
     </head>
     <body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
       <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
@@ -14,7 +14,7 @@ function baseTemplate(content) {
               style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
               <tr>
                 <td style="background:#4f46e5;padding:24px 40px;">
-                  <h1 style="margin:0;color:#ffffff;font-size:22px;">${process.env.APP_NAME}</h1>
+                  <h1 style="margin:0;color:#ffffff;font-size:22px;">${process.env.APP_NAME || 'App'}</h1>
                 </td>
               </tr>
               <tr>
@@ -40,4 +40,4 @@ function baseTemplate(content) {
   return html
 }
 
-module.exports = baseTemplate
+export default baseTemplate

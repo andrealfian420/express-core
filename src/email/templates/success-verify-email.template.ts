@@ -1,6 +1,10 @@
-const baseTemplate = require('./layout/base.template')
+import baseTemplate from './layout/base.template'
 
-function successVerifyEmailTemplate(data) {
+interface VerifyEmailData {
+  name: string
+}
+
+function successVerifyEmailTemplate(data: VerifyEmailData): string {
   const { name } = data
   const html = `
     <p style="color:#374151;font-size:16px;">Hello, <strong>${name}</strong>!</p>
@@ -15,4 +19,4 @@ function successVerifyEmailTemplate(data) {
   return baseTemplate(html)
 }
 
-module.exports = successVerifyEmailTemplate
+export default successVerifyEmailTemplate

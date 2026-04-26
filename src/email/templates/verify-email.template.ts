@@ -1,6 +1,11 @@
-const baseTemplate = require('./layout/base.template')
+import baseTemplate from './layout/base.template'
 
-function verifyEmailTemplate(data) {
+interface VerifyEmailData {
+  name: string
+  link: string
+}
+
+function verifyEmailTemplate(data: VerifyEmailData): string {
   const { name, link } = data
   const html = `
     <p style="color:#374151;font-size:16px;">Hello, <strong>${name}</strong>!</p>
@@ -16,11 +21,11 @@ function verifyEmailTemplate(data) {
     </div>
     <p style="color:#9ca3af;font-size:13px;">
       This link is valid for <strong>24 hours</strong>.<br/>
-      If you did not register at ${process.env.APP_NAME}, please ignore this email.
+      If you did not register at ${process.env.APP_NAME || 'App'}, please ignore this email.
     </p>
   `
 
   return baseTemplate(html)
 }
 
-module.exports = verifyEmailTemplate
+export default verifyEmailTemplate

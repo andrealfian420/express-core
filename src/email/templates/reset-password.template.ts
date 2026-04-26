@@ -1,6 +1,11 @@
-const baseTemplate = require('./layout/base.template')
+import baseTemplate from './layout/base.template'
 
-function resetPasswordTemplate(data) {
+interface ResetPasswordData {
+  name: string
+  link: string
+}
+
+function resetPasswordTemplate(data: ResetPasswordData): string {
   const { name, link } = data
   const html = `
     <p style="color:#374151;font-size:16px;">Hello, <strong>${name}</strong>!</p>
@@ -23,4 +28,4 @@ function resetPasswordTemplate(data) {
   return baseTemplate(html)
 }
 
-module.exports = resetPasswordTemplate
+export default resetPasswordTemplate

@@ -1,9 +1,9 @@
-const cron = require('node-cron')
-const systemQueue = require('../queues/system.queue')
-const logger = require('../../config/logger')
+import cron from 'node-cron'
+import systemQueue from '../queues/system.queue'
+import logger from '../../config/logger'
 
 // This function sets up scheduled cron jobs for the application
-function startCronJobs() {
+function startCronJobs(): void {
   // Schedule the cleanup job to run every hour
   cron.schedule('0 * * * *', async () => {
     logger.info('Running scheduled job: Cleanup expired tokens') // Log when the cron job starts
@@ -16,4 +16,4 @@ function startCronJobs() {
   })
 }
 
-module.exports = startCronJobs
+export default startCronJobs

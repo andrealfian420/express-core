@@ -1,12 +1,18 @@
-const { Worker } = require('bullmq')
-const redis = require('../../config/redis')
-const emailService = require('../../services/email.service')
-const AppError = require('../../utils/appError')
-const { QUEUE_NAMES } = require('../config/queue.constants')
+import { Worker, Job } from 'bullmq'
+import redis from '../../config/redis'
+import emailService from '../../services/email.service'
+import AppError from '../../utils/appError'
+import { QUEUE_NAMES } from '../config/queue.constants'
+
+export interface EmailJobData {
+  email: string
+  name: string
+  token?: string
+}
 
 const emailWorker = new Worker(
   QUEUE_NAMES.EMAIL,
-  async (job) => {
+  async (job: Job<EmailJobData>) => {
     switch (job.name) {
       case 'sendVerificationEmail':
         await emailService.sendVerificationEmail(job.data.email, {
@@ -37,4 +43,4 @@ const emailWorker = new Worker(
   },
 )
 
-module.exports = emailWorker
+export default emailWorker
