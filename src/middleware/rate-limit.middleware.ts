@@ -17,13 +17,21 @@ const createRateLimiter = (options: CustomRateLimitOptions) => {
   return rateLimit({
     // uses Redis to store rate limit data, which allows for distributed rate limiting across multiple server instances
     store: new RedisStore({
-      sendCommand: (...args: string[]) => redis.call(...args),
+      // the Redis store expects a sendCommand function that can execute Redis commands, we provide it by calling the redis client's call method
+      // arguments are passed as an array, where the first element is the command and the rest are the command arguments
+      sendCommand: (...args: string[]) =>
+        redis.call(args[0], ...args.slice(1)) as any,
     }),
     windowMs: options.windowMs || 15 * 60 * 1000, // default 15 minutes
     max: options.max || 100, // default 100 requests per window
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    handler: (req: Request, res: Response, next: NextFunction, optionsInfo: RateLimitOptions) => {
+    handler: (
+      req: Request,
+      res: Response,
+      next: NextFunction,
+      optionsInfo: RateLimitOptions,
+    ) => {
       // custom handler for when a client exceeds the rate limit
       logger.warn('Rate limit exceeded', {
         ip: req.ip || 'unknown',
@@ -80,7 +88,7 @@ const resetPasswordRateLimiter = createRateLimiter({
   max: 10, // limit each IP to 10 reset attempts per windowMs
 })
 
-module.exports = {
+export {
   createRateLimiter,
   apiRateLimiter,
   authRateLimiter,
