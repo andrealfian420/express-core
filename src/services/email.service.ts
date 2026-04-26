@@ -1,12 +1,25 @@
-const transporter = require('../email/mailer')
-const verifyEmailTemplate = require('../email/templates/verify-email.template')
-const resetPasswordTemplate = require('../email/templates/reset-password.template')
-const successVerifyEmailTemplate = require('../email/templates/success-verify-email.template')
-const logger = require('../config/logger')
+import transporter from '../email/mailer'
+import verifyEmailTemplate from '../email/templates/verify-email.template'
+import resetPasswordTemplate from '../email/templates/reset-password.template'
+import successVerifyEmailTemplate from '../email/templates/success-verify-email.template'
+import logger from '../config/logger'
+
+interface VerifyEmailData {
+  name: string
+  link: string
+  token?: string
+}
+
+interface SuccessVerifyEmailData {
+  name: string
+}
 
 // This service contains the business logic for sending emails.
 class EmailService {
-  async sendVerificationEmail(to, data) {
+  async sendVerificationEmail(
+    to: string,
+    data: VerifyEmailData,
+  ): Promise<void> {
     logger.info(`Sending verification email to: ${to}`)
 
     const html = verifyEmailTemplate(data)
@@ -18,7 +31,10 @@ class EmailService {
     })
   }
 
-  async sendResetPasswordEmail(to, data) {
+  async sendResetPasswordEmail(
+    to: string,
+    data: VerifyEmailData,
+  ): Promise<void> {
     logger.info(`Sending reset password email to: ${to}`)
 
     const html = resetPasswordTemplate(data)
@@ -30,7 +46,10 @@ class EmailService {
     })
   }
 
-  async sendVerificationSuccessEmail(to, data) {
+  async sendVerificationSuccessEmail(
+    to: string,
+    data: SuccessVerifyEmailData,
+  ): Promise<void> {
     logger.info(`Sending verification success email to: ${to}`)
 
     const html = successVerifyEmailTemplate(data)
@@ -43,4 +62,4 @@ class EmailService {
   }
 }
 
-module.exports = new EmailService()
+export default new EmailService()

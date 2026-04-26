@@ -1,8 +1,8 @@
-const prisma = require('../config/database')
-const logger = require('../config/logger')
+import prisma from '../config/database'
+import logger from '../config/logger'
 
 class SystemService {
-  async cleanupExpiredTokens() {
+  async cleanupExpiredTokens(): Promise<void> {
     const now = new Date()
     logger.info('Starting cleanup of expired tokens')
 
@@ -33,7 +33,7 @@ class SystemService {
     logger.info('Finished cleanup of expired tokens')
   }
 
-  generateDefaultDescription(action, subjectType) {
+  generateDefaultDescription(action: string, subjectType: string): string {
     switch (action.toUpperCase()) {
       case 'CREATE':
         return `Create new data ${subjectType}`
@@ -51,15 +51,15 @@ class SystemService {
   }
 
   async logActivity(
-    userId = null,
-    action,
-    subjectType,
-    subjectId = null,
-    description,
-    oldData = null,
-    newData = null,
-    txOrPrisma = null,
-  ) {
+    userId: string | null = null,
+    action: string,
+    subjectType: string,
+    subjectId: string | number | null = null,
+    description: string | null = null,
+    oldData: any = null,
+    newData: any = null,
+    txOrPrisma: any = null,
+  ): Promise<void> {
     try {
       const db = txOrPrisma || prisma
       // If description is not provided, generate a default one based on action and subjectType
@@ -83,4 +83,4 @@ class SystemService {
   }
 }
 
-module.exports = new SystemService()
+export default new SystemService()

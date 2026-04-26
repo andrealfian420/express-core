@@ -1,13 +1,13 @@
-const fs = require('fs')
-const path = require('path')
+import fs from 'fs'
+import path from 'path'
 
 // This service provides methods to manage files in the storage, such as generating public URLs and deleting files.
 class StorageService {
-  getPublicUrl(folder, filename) {
+  getPublicUrl(folder: string, filename: string): string {
     return `${process.env.APP_URL}/storage/${folder}/${filename}`
   }
 
-  deleteFile(folder, filename) {
+  deleteFile(folder: string, filename: string): void {
     const filePath = path.join(
       process.cwd(),
       'client/storage/public/uploads',
@@ -20,7 +20,7 @@ class StorageService {
     }
   }
 
-  fileExists(folder, filename) {
+  fileExists(folder: string, filename: string): boolean {
     const filePath = path.join(
       process.cwd(),
       'client/storage/public/uploads',
@@ -32,4 +32,4 @@ class StorageService {
   }
 }
 
-module.exports = new StorageService()
+export default new StorageService()
