@@ -1,9 +1,10 @@
-const express = require('express')
-const activityLogController = require('./activity-log.controller')
-const authMiddleware = require('../../middleware/auth.middleware')
-const checkPermission = require('../../middleware/rbac.middleware')
-const { PERMISSIONS } = require('../role/role.permissions')
-const router = express.Router()
+import { Router } from 'express'
+import activityLogController from './activity-log.controller'
+import authMiddleware from '../../middleware/auth.middleware'
+import checkPermission from '../../middleware/rbac.middleware'
+import { PERMISSIONS } from '../role/role.permissions'
+
+const router = Router()
 
 router.use(authMiddleware)
 
@@ -25,4 +26,4 @@ router.get(
   activityLogController.getUserLogs,
 )
 
-module.exports = router
+export default router

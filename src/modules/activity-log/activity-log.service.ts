@@ -1,13 +1,14 @@
-const AppError = require('../../utils/appError')
-const activityLogRepository = require('./activity-log.repository')
+import { Request } from 'express'
+import AppError from '../../utils/appError'
+import activityLogRepository from './activity-log.repository'
 
 // ActivityLogService contains business logic related to activity logs.
 class ActivityLogService {
-  async getActivityLogs(req) {
+  async getActivityLogs(req: Request): Promise<any> {
     return await activityLogRepository.paginate(req)
   }
 
-  async getActivityLogById(id) {
+  async getActivityLogById(id: number): Promise<any> {
     const activityLog = await activityLogRepository.findById(id)
     if (!activityLog) {
       throw new AppError('Activity log not found', 404)
@@ -24,9 +25,9 @@ class ActivityLogService {
     return activityLog
   }
 
-  async getActivityLogsByUserId(userId, req) {
+  async getActivityLogsByUserId(userId: number, req: Request): Promise<any> {
     return await activityLogRepository.findByUserId(userId, req)
   }
 }
 
-module.exports = new ActivityLogService()
+export default new ActivityLogService()

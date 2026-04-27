@@ -1,9 +1,10 @@
-const activityLogService = require('./activity-log.service')
-const response = require('../../utils/response')
+import { Request, Response, NextFunction } from 'express'
+import activityLogService from './activity-log.service'
+import response from '../../utils/response'
 
 // ActivityLogController handles HTTP requests related to activity logs.
 class ActivityLogController {
-  async index(req, res, next) {
+  async index(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await activityLogService.getActivityLogs(req)
       response(res, result, 'Activity logs retrieved successfully')
@@ -12,10 +13,10 @@ class ActivityLogController {
     }
   }
 
-  async show(req, res, next) {
+  async show(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const activityLog = await activityLogService.getActivityLogById(
-        parseInt(req.params.id),
+        parseInt(req.params.id as string, 10),
       )
       response(res, activityLog, 'Activity log retrieved successfully')
     } catch (err) {
@@ -23,10 +24,14 @@ class ActivityLogController {
     }
   }
 
-  async getUserLogs(req, res, next) {
+  async getUserLogs(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
     try {
       const result = await activityLogService.getActivityLogsByUserId(
-        parseInt(req.params.userId),
+        parseInt(req.params.userId as string, 10),
         req,
       )
       response(res, result, 'User activity logs retrieved successfully')
@@ -36,4 +41,4 @@ class ActivityLogController {
   }
 }
 
-module.exports = new ActivityLogController()
+export default new ActivityLogController()
