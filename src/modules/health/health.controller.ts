@@ -1,21 +1,25 @@
-const prisma = require('../../config/database')
-const logger = require('../../config/logger')
-const redis = require('../../config/redis')
+import { Request, Response } from 'express'
+import prisma from '../../config/database'
+import logger from '../../config/logger'
+import redis from '../../config/redis'
 
 // Health Controller to check the health of the application and its dependencies
 class HealthController {
-  async healthCheck(req, res) {
+  async healthCheck(req: Request, res: Response): Promise<void> {
     const isProd = process.env.NODE_ENV === 'production'
 
     const health = {
       status: 'OK',
       uptime: process.uptime(),
       timestamp: Date.now(),
-      services: {},
+      services: {
+        database: 'UNKNOWN',
+        redis: 'UNKNOWN',
+      },
     }
 
-    let dbStatus = null
-    let redisStatus = null
+    let dbStatus: string | null = null
+    let redisStatus: string | null = null
 
     try {
       // Check database connection
@@ -45,7 +49,7 @@ class HealthController {
     res.status(200).json(health)
   }
 
-  async readyCheck(req, res) {
+  async readyCheck(req: Request, res: Response): Promise<void> {
     try {
       await prisma.$queryRaw`SELECT 1`
       await redis.ping()
@@ -59,4 +63,4 @@ class HealthController {
   }
 }
 
-module.exports = new HealthController()
+export default new HealthController()
