@@ -3,10 +3,15 @@
 // export empty object to convert this file into a module and avoid polluting the global namespace
 export {}
 
-interface RoleData {
+export interface RoleData {
   id: string | number
   slug: string
   access: string[] // Array of permission strings
+}
+
+export interface CachedUserData {
+  id: string | number
+  role: RoleData | null
 }
 
 // declare global to extend the Express namespace and its Request interface

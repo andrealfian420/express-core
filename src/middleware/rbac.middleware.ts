@@ -3,19 +3,10 @@ import AppError from '../utils/appError'
 import prisma from '../config/database'
 import cacheService from '../services/cache.service'
 
+// Import the interfaces from the extended Express types
+import { CachedUserData } from '../types/express'
+
 const USER_ROLE_CACHE_TTL = 300 // 5 minutes
-
-// Define a TypeScript interface for the role data structure
-interface RoleData {
-  id: string | number
-  slug: string
-  access: string[] // Array of permission strings
-}
-
-interface CachedUserData {
-  id: string | number
-  role: RoleData | null
-}
 
 /**
  * RBAC middleware factory.
