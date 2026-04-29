@@ -1,18 +1,29 @@
-const AppError = require('../../utils/appError')
-const profileRepository = require('./profile.repository')
-const storageService = require('../../services/storage.service')
-const cacheService = require('../../services/cache.service')
-const systemService = require('../../services/system.service')
-const prisma = require('../../config/database')
-const userRepository = require('../user/user.repository')
-const { makeUniqueSlug } = require('../../utils/sluggable')
-const bcrypt = require('bcryptjs')
-const authRepository = require('../auth/auth.repository')
+import AppError from '../../utils/appError'
+import profileRepository, { UserProfileResponse } from './profile.repository'
+import storageService from '../../services/storage.service'
+import cacheService from '../../services/cache.service'
+import systemService from '../../services/system.service'
+import prisma from '../../config/database'
+import userRepository from '../user/user.repository'
+import { makeUniqueSlug } from '../../utils/sluggable'
+import bcrypt from 'bcryptjs'
+import authRepository from '../auth/auth.repository'
+
+const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 10)
+
+export interface UpdateProfileInput {
+  name?: string
+  email?: string
+  avatar?: string
+  password?: string
+}
 
 class ProfileService {
-  async getProfile(userId) {
+  async getProfile(userId: number): Promise<UserProfileResponse> {
     const cacheKey = `profile:${userId}`
-    const cachedProfile = await cacheService.get(cacheKey)
+    const cachedProfile = (await cacheService.get(
+      cacheKey,
+    )) as UserProfileResponse | null
 
     if (cachedProfile) {
       return cachedProfile
@@ -36,7 +47,10 @@ class ProfileService {
     return profile
   }
 
-  async updateProfile(userId, data) {
+  async updateProfile(
+    userId: number,
+    data: UpdateProfileInput,
+  ): Promise<UserProfileResponse> {
     const existingProfile = await profileRepository.getProfile(userId)
 
     if (!existingProfile) {
@@ -49,7 +63,7 @@ class ProfileService {
       }
     }
 
-    const updatedProfile = await prisma.$transaction(async (tx) => {
+    const updatedProfile = await prisma.$transaction(async (tx: any) => {
       // onUpdate: regenerate slug whenever name changes
       let newSlug
       if (data.name && data.name !== existingProfile.name) {
@@ -63,10 +77,7 @@ class ProfileService {
 
       let newPassword = ''
       if (data.password) {
-        newPassword = await bcrypt.hash(
-          data.password,
-          parseInt(process.env.BCRYPT_ROUNDS),
-        )
+        newPassword = await bcrypt.hash(data.password, BCRYPT_ROUNDS)
       }
 
       const updated = await profileRepository.updateProfile(
@@ -120,4 +131,4 @@ class ProfileService {
   }
 }
 
-module.exports = new ProfileService()
+export default new ProfileService()

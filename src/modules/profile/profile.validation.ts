@@ -1,8 +1,8 @@
-const { z } = require('zod')
+import { z } from 'zod'
 
 const updateProfileSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  email: z.email('Invalid email address').optional(),
+  email: z.string().email('Invalid email address').optional(),
   avatar: z.string().optional(), // file upload
   password: z
     .string()
@@ -19,6 +19,4 @@ const updateProfileSchema = z.object({
     .optional(),
 })
 
-module.exports = {
-  updateProfileSchema,
-}
+export { updateProfileSchema }

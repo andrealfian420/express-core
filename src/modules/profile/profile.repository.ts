@@ -1,0 +1,63 @@
+import { Prisma, User } from '@prisma/client'
+import prisma from '../../config/database'
+
+// Custom type for profile response with avatarUrl, etc.
+// You can adjust this based on your actual response structure
+export type UserProfileResponse = Prisma.UserGetPayload<{
+  select: {
+    id: true
+    name: true
+    email: true
+    avatar: true
+    role: {
+      select: {
+        title: true
+        access: true
+      }
+    }
+  }
+}> & {
+  avatarUrl?: string
+}
+
+class ProfileRepository {
+  async getProfile(
+    userId: number,
+    txOrPrisma: any = null,
+  ): Promise<UserProfileResponse | null> {
+    const db = txOrPrisma || prisma
+    return await db.user.findFirst({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        role: {
+          select: {
+            title: true,
+            access: true,
+          },
+        },
+      },
+    })
+  }
+
+  async updateProfile(
+    userId: number,
+    data: Prisma.UserUpdateInput,
+    txOrPrisma: any = null,
+  ): Promise<User> {
+    const db = txOrPrisma || prisma
+    return await db.user.update({
+      where: {
+        id: userId,
+      },
+      data,
+    })
+  }
+}
+
+export default new ProfileRepository()
