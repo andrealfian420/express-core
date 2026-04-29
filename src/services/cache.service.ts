@@ -30,7 +30,7 @@ class CacheService {
   // sadd is a Redis command that stands for "Set Add". It is used to add a member to a set stored at a specified key in Redis.
   // This is useful for maintaining collections of related items, such as user IDs associated with a particular role.
   // The member is added to the set, and if the set does not exist, it will be created automatically
-  async sadd(key: string, member: string, ttl: number = 60): Promise<void> {
+  async sadd(key: string, member: string | number, ttl: number = 60): Promise<void> {
     await redis.sadd(key, member)
     await redis.expire(key, ttl)
   }

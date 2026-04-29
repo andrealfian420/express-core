@@ -2,14 +2,8 @@ import { Request, Response, NextFunction } from 'express'
 import jwt, { JwtPayload } from 'jsonwebtoken'
 import AppError from '../utils/appError'
 
-// Extend Express Request interface to include user property
-export interface AuthRequest extends Request {
-  // JwtPayload is a type from jsonwebtoken that represents the decoded token payload
-  user?: string | JwtPayload
-}
-
 const authMiddleware = (
-  req: AuthRequest,
+  req: Request,
   res: Response,
   next: NextFunction,
 ) => {
@@ -29,7 +23,7 @@ const authMiddleware = (
     // use type assertion to tell TypeScript that JWT_ACCESS_SECRET is a string
     const secret = process.env.JWT_ACCESS_SECRET as string
 
-    const decoded = jwt.verify(token, secret)
+    const decoded = jwt.verify(token, secret) as JwtPayload
     req.user = decoded
     next()
   } catch (err) {

@@ -18,6 +18,10 @@
     "target": "ES6",
 
     // Enable all strict type-checking options.
-    "strict": true
+    "strict": true,
+
+    // Include type definitions from the specified directories.
+    // This allows TypeScript to recognize custom types defined in the project, as well as types from installed packages.
+    "typeRoots": ["./node_modules/@types", "./src/types"]
   }
 }

@@ -17,14 +17,6 @@ interface CachedUserData {
   role: RoleData | null
 }
 
-export interface RBACRequest extends Request {
-  user?: {
-    sub: string | number
-    [key: string]: any
-  }
-  role?: RoleData
-}
-
 /**
  * RBAC middleware factory.
  * Usage: checkPermission(PERMISSIONS.DATA_MASTER.ROLE.INDEX)
@@ -32,7 +24,7 @@ export interface RBACRequest extends Request {
  * Relies on authMiddleware having already set req.user = { sub: userId }.
  */
 const checkPermission = (permission: string) => {
-  return async (req: RBACRequest, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.user?.sub
       if (!userId) {
