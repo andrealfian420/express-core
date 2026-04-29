@@ -1,7 +1,8 @@
-const prisma = require('../../config/database')
+import { Role } from '@prisma/client'
+import prisma from '../../config/database'
 
 class HelperRepository {
-  async getRoleOptions() {
+  async getRoleOptions(): Promise<Role[]> {
     return await prisma.role.findMany({
       where: { deletedAt: null },
       select: {
@@ -13,4 +14,4 @@ class HelperRepository {
   }
 }
 
-module.exports = new HelperRepository()
+export default new HelperRepository()
