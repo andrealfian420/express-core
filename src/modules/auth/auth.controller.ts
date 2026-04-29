@@ -1,9 +1,18 @@
-const authService = require('./auth.service')
-const response = require('../../utils/response')
+import { Request, Response, NextFunction } from 'express'
+import authService from './auth.service'
+import response from '../../utils/response'
+
+const refreshTokenExpiryDays = Number(
+  process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7,
+)
 
 // AuthController handles HTTP requests related to authentication.
 class AuthController {
-  async register(req, res, next) {
+  async register(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
     try {
       const newUser = await authService.register(req.body)
       response(
@@ -17,7 +26,7 @@ class AuthController {
     }
   }
 
-  async login(req, res, next) {
+  async login(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const tokens = await authService.login(req.body.email, req.body.password)
 
@@ -26,7 +35,7 @@ class AuthController {
         httpOnly: true,
         sameSite: 'lax', // use 'lax' because our api are on the subdomain of the frontend, if you are using different domains, consider using 'none' and ensure secure is true
         secure: process.env.NODE_ENV === 'production', // Only set secure flag in production
-        maxAge: process.env.REFRESH_TOKEN_EXPIRES_DAYS * 86400000, // expire in days
+        maxAge: refreshTokenExpiryDays * 86400000, // expire in days
       })
 
       response(
@@ -41,16 +50,20 @@ class AuthController {
     }
   }
 
-  async refreshAccessToken(req, res, next) {
+  async refreshAccessToken(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
     try {
-      const token = req.cookies.refreshToken
+      const token = req.cookies.refreshToken as string
       const result = await authService.refreshAccessToken(token)
 
       res.cookie('refreshToken', result.refreshToken, {
         httpOnly: true,
         sameSite: 'lax', // use 'lax' because our api are on the subdomain of the frontend, if you are using different domains, consider using 'none' and ensure secure is true
         secure: process.env.NODE_ENV === 'production', // Only set secure flag in production
-        maxAge: process.env.REFRESH_TOKEN_EXPIRES_DAYS * 86400000,
+        maxAge: refreshTokenExpiryDays * 86400000,
       })
 
       response(
@@ -63,36 +76,48 @@ class AuthController {
     }
   }
 
-  async verifyEmail(req, res, next) {
+  async verifyEmail(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
     try {
-      await authService.verifyEmail(req.query.token)
+      await authService.verifyEmail(req.query.token as string)
       response(res, null, 'Email verified successfully')
     } catch (err) {
       next(err)
     }
   }
 
-  async requestPasswordReset(req, res, next) {
+  async requestPasswordReset(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
     try {
-      await authService.requestPasswordReset(req.body.email)
+      await authService.requestPasswordReset(req.body.email as string)
       response(res, null, 'If email exists, a reset link has been sent')
     } catch (err) {
       next(err)
     }
   }
 
-  async resetPassword(req, res, next) {
+  async resetPassword(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
     try {
-      await authService.resetPassword(req.body.token, req.body.newPassword)
+      await authService.resetPassword(req.body.token as string, req.body.newPassword as string)
       response(res, null, 'Password reset successfully')
     } catch (err) {
       next(err)
     }
   }
 
-  async logout(req, res, next) {
+  async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const token = req.cookies.refreshToken
+      const token = req.cookies.refreshToken as string
       if (token) {
         await authService.logout(token)
       }
@@ -102,7 +127,7 @@ class AuthController {
         httpOnly: true,
         sameSite: 'lax', // use 'lax' because our api are on the subdomain of the frontend, if you are using different domains, consider using 'none' and ensure secure is true
         secure: process.env.NODE_ENV === 'production', // Only set secure flag in production
-        maxAge: process.env.REFRESH_TOKEN_EXPIRES_DAYS * 86400000, // expire in days
+        maxAge: refreshTokenExpiryDays * 86400000, // expire in days
       })
 
       response(res, null, 'Logged out successfully')
@@ -112,4 +137,4 @@ class AuthController {
   }
 }
 
-module.exports = new AuthController()
+export default new AuthController()

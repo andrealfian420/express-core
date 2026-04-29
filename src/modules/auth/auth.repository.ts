@@ -1,8 +1,9 @@
-const prisma = require('../../config/database')
+import prisma from '../../config/database'
+import { PasswordResetToken, Prisma, RefreshToken, User } from '@prisma/client'
 
 // This repository handles all database interactions related to authentication.
 class AuthRepository {
-  async findUserByEmail(email, txOrPrisma = null) {
+  async findUserByEmail(email: string, txOrPrisma: any = null): Promise<User | null> {
     const db = txOrPrisma || prisma
     return await db.user.findFirst({
       where: {
@@ -12,21 +13,21 @@ class AuthRepository {
     })
   }
 
-  async createUser(userData, txOrPrisma = null) {
+  async createUser(userData: Prisma.UserUncheckedCreateInput, txOrPrisma: any = null): Promise<User> {
     const db = txOrPrisma || prisma
     return await db.user.create({
       data: userData,
     })
   }
 
-  async createRefreshToken(tokenData, txOrPrisma = null) {
+  async createRefreshToken(tokenData: Prisma.RefreshTokenUncheckedCreateInput, txOrPrisma: any = null): Promise<RefreshToken> {
     const db = txOrPrisma || prisma
     return await db.refreshToken.create({
       data: tokenData,
     })
   }
 
-  async findRefreshToken(token, txOrPrisma = null) {
+  async findRefreshToken(token: string, txOrPrisma: any = null): Promise<RefreshToken | null> {
     const db = txOrPrisma || prisma
     return await db.refreshToken.findFirst({
       where: {
@@ -35,7 +36,7 @@ class AuthRepository {
     })
   }
 
-  async deleteRefreshToken(token, txOrPrisma = null) {
+  async deleteRefreshToken(token: string, txOrPrisma: any = null): Promise<RefreshToken> {
     const db = txOrPrisma || prisma
     return await db.refreshToken.delete({
       where: {
@@ -44,7 +45,7 @@ class AuthRepository {
     })
   }
 
-  async findUniqueToken(token, txOrPrisma = null) {
+  async findUniqueToken(token: string, txOrPrisma: any = null): Promise<PasswordResetToken | null> {
     const db = txOrPrisma || prisma
     return await db.passwordResetToken.findUnique({
       where: {
@@ -53,7 +54,7 @@ class AuthRepository {
     })
   }
 
-  async deletePasswordResetToken(token, txOrPrisma = null) {
+  async deletePasswordResetToken(token: string, txOrPrisma: any = null): Promise<PasswordResetToken> {
     const db = txOrPrisma || prisma
     return await db.passwordResetToken.delete({
       where: {
@@ -62,7 +63,7 @@ class AuthRepository {
     })
   }
 
-  async updatePasswordResetToken(token, data, txOrPrisma = null) {
+  async updatePasswordResetToken(token: string, data: Prisma.PasswordResetTokenUpdateInput, txOrPrisma: any = null): Promise<PasswordResetToken> {
     const db = txOrPrisma || prisma
     return await db.passwordResetToken.update({
       where: {
@@ -72,7 +73,7 @@ class AuthRepository {
     })
   }
 
-  async deleteRefreshTokensByUserId(userId, txOrPrisma = null) {
+  async deleteRefreshTokensByUserId(userId: number, txOrPrisma: any = null): Promise<Prisma.BatchPayload> {
     const db = txOrPrisma || prisma
     return await db.refreshToken.deleteMany({
       where: {
@@ -82,4 +83,4 @@ class AuthRepository {
   }
 }
 
-module.exports = new AuthRepository()
+export default new AuthRepository()

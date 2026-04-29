@@ -1,20 +1,23 @@
-const express = require('express')
-const authController = require('./auth.controller')
-const router = express.Router()
-const validate = require('../../middleware/validate.middleware')
-const {
+import { Router } from 'express'
+import validate from '../../middleware/validate.middleware'
+import authController from './auth.controller'
+
+import {
   registerSchema,
   loginSchema,
   requestPasswordResetSchema,
   resetPasswordSchema,
-} = require('./auth.validation')
-const {
+} from './auth.validation'
+
+import {
   loginRateLimiter,
   registerRateLimiter,
   requestPasswordResetRateLimiter,
   resetPasswordRateLimiter,
   authRateLimiter,
-} = require('../../middleware/rate-limit.middleware')
+} from '../../middleware/rate-limit.middleware'
+
+const router = Router()
 
 router.post(
   '/register',
@@ -45,4 +48,4 @@ router.post('/refresh', authController.refreshAccessToken)
 router.get('/verify-email', authController.verifyEmail)
 router.post('/logout', authController.logout)
 
-module.exports = router
+export default router

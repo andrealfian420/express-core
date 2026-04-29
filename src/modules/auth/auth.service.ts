@@ -1,41 +1,55 @@
-const bcrypt = require('bcryptjs')
-const authRepository = require('./auth.repository')
-const { generateToken } = require('../../utils/token')
-const prisma = require('../../config/database')
-const AppError = require('../../utils/appError')
-const { generateAccessToken } = require('../../utils/jwt')
-const { emailQueue } = require('../../jobs')
-const logger = require('../../config/logger')
-const { makeUniqueSlug } = require('../../utils/sluggable')
-const userRepository = require('../user/user.repository')
-const cacheService = require('../../services/cache.service')
+import bcrypt from 'bcryptjs'
+import authRepository from './auth.repository'
+import { generateToken } from '../../utils/token'
+import { Prisma } from '@prisma/client'
+import prisma from '../../config/database'
+import AppError from '../../utils/appError'
+import { generateAccessToken } from '../../utils/jwt'
+import { emailQueue } from '../../jobs'
+import logger from '../../config/logger'
+import { makeUniqueSlug } from '../../utils/sluggable'
+import userRepository from '../user/user.repository'
+import cacheService from '../../services/cache.service'
+
+const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS) || 10
+const REFRESH_TOKEN_EXPIRES_DAYS =
+  Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS) || 7
+const EMAIL_VERIFICATION_EXPIRES_HOURS =
+  Number(process.env.EMAIL_VERIFICATION_EXPIRES_HOURS) || 24
+const PASSWORD_RESET_EXPIRES_MINUTES =
+  Number(process.env.PASSWORD_RESET_EXPIRES_MINUTES) || 60
 
 // This service contains the business logic for authentication-related operations.
 class AuthService {
-  async register(userData) {
+  async register(
+    userData: Prisma.UserUncheckedCreateInput,
+  ): Promise<{ user: any; token: string }> {
     // Use transaction to ensure user and verification token are created atomically
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const existingUser = await authRepository.findUserByEmail(
-        userData.email,
+        userData.email as string,
         tx,
       )
+
       if (existingUser) {
         throw new AppError('Email already in use', 400)
       }
 
       const hashedPassword = await bcrypt.hash(
-        userData.password,
-        Number(process.env.BCRYPT_ROUNDS),
+        userData.password as string,
+        BCRYPT_ROUNDS,
       )
 
-      const slug = await makeUniqueSlug(userData.name, (candidate, excludeId) =>
-        tx.user.findFirst({
-          where: {
-            slug: candidate,
-            deletedAt: null,
-            ...(excludeId ? { id: { not: excludeId } } : {}),
-          },
-        }),
+      const slug = await makeUniqueSlug(
+        userData.name as string,
+        (candidate, excludeId) =>
+          tx.user.findFirst({
+            where: {
+              slug: candidate,
+              deletedAt: null,
+              ...(excludeId ? { id: { not: excludeId } } : {}),
+            },
+          }),
       )
 
       const user = await authRepository.createUser(
@@ -55,7 +69,7 @@ class AuthService {
           token: token,
           userId: user.id,
           expiresAt: new Date(
-            Date.now() + process.env.EMAIL_VERIFICATION_EXPIRES_HOURS * 3600000,
+            Date.now() + EMAIL_VERIFICATION_EXPIRES_HOURS * 3600000,
           ),
         },
       })
@@ -75,7 +89,7 @@ class AuthService {
     return result
   }
 
-  async login(email, password) {
+  async login(email: string, password: string): Promise<{accessToken: string; refreshToken: string}> {
     const user = await authRepository.findUserByEmail(email)
 
     if (!user || !user.isEmailVerified) {
@@ -85,7 +99,7 @@ class AuthService {
       )
     }
 
-    const isMatch = await bcrypt.compare(password, user.password)
+    const isMatch = await bcrypt.compare(password, user.password as string)
     if (!isMatch) {
       throw new AppError('Invalid email or password', 401)
     }
@@ -98,21 +112,19 @@ class AuthService {
     await authRepository.createRefreshToken({
       token: refreshToken,
       userId: user.id,
-      expiresAt: new Date(
-        Date.now() + process.env.REFRESH_TOKEN_EXPIRES_DAYS * 86400000,
-      ),
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRES_DAYS * 86400000),
     })
 
     return { accessToken, refreshToken }
   }
 
-  async refreshAccessToken(token) {
+  async refreshAccessToken(token: string): Promise<{ accessToken: string; refreshToken: string }> {
     if (!token) {
       throw new AppError('Refresh token required', 401)
     }
 
     // Use transaction to ensure token rotation is atomic (delete old token and create new one)
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx: any) => {
       const record = await authRepository.findRefreshToken(token, tx)
 
       if (!record) {
@@ -132,19 +144,20 @@ class AuthService {
           token: newRefreshToken,
           userId: record.userId,
           expiresAt: new Date(
-            Date.now() + process.env.REFRESH_TOKEN_EXPIRES_DAYS * 86400000,
+            Date.now() + REFRESH_TOKEN_EXPIRES_DAYS * 86400000,
           ),
         },
         tx,
       )
 
       const accessToken = generateAccessToken({ id: record.userId })
+      const refreshToken = newRefreshToken
 
-      return { accessToken, refreshToken: newRefreshToken }
+      return { accessToken, refreshToken }
     })
   }
 
-  async logout(token) {
+  async logout(token: string): Promise<void> {
     const record = await authRepository.findRefreshToken(token)
 
     if (!record) {
@@ -155,9 +168,9 @@ class AuthService {
     await authRepository.deleteRefreshToken(token)
   }
 
-  async verifyEmail(token) {
+  async verifyEmail(token: string): Promise<void> {
     // Use transaction to ensure user update and token deletion are atomic
-    const user = await prisma.$transaction(async (tx) => {
+    const user = await prisma.$transaction(async (tx: any) => {
       const record = await tx.emailVerificationToken.findUnique({
         where: {
           token: token,
@@ -210,11 +223,11 @@ class AuthService {
     logger.info(`Email verified successfully for user: ${user.email}`)
   }
 
-  async requestPasswordReset(email) {
+  async requestPasswordReset(email: string): Promise<void> {
     const user = await authRepository.findUserByEmail(email)
 
     if (!user) {
-      return true // Don't reveal that the email doesn't exist
+      return // Don't reveal that the email doesn't exist
     }
 
     const token = generateToken()
@@ -224,7 +237,7 @@ class AuthService {
         token: token,
         userId: user.id,
         expiresAt: new Date(
-          Date.now() + process.env.PASSWORD_RESET_EXPIRES_MINUTES * 60000,
+          Date.now() + PASSWORD_RESET_EXPIRES_MINUTES * 60000,
         ),
       },
     })
@@ -234,9 +247,9 @@ class AuthService {
     logger.info(`Password reset token created for user: ${user.email}`)
   }
 
-  async resetPassword(token, newPassword) {
+  async resetPassword(token: string, newPassword: string): Promise<void> {
     // Use transaction to ensure password update and token marking are atomic
-    const userId = await prisma.$transaction(async (tx) => {
+    const userId = await prisma.$transaction(async (tx: any) => {
       const record = await authRepository.findUniqueToken(token, tx)
 
       if (!record) {
@@ -278,4 +291,4 @@ class AuthService {
   }
 }
 
-module.exports = new AuthService()
+export default new AuthService()
