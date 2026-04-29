@@ -19,7 +19,7 @@ declare global {
   namespace Express {
     export interface Request {
       user?: {
-        sub?: string | number | null
+        sub?: number
       }
       role?: RoleData
     }

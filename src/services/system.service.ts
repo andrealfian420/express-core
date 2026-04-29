@@ -51,10 +51,10 @@ class SystemService {
   }
 
   async logActivity(
-    userId: string | null = null,
+    userId: number | null = null,
     action: string,
     subjectType: string,
-    subjectId: string | number | null = null,
+    subjectId: number | null = null,
     description: string | null = null,
     oldData: any = null,
     newData: any = null,
