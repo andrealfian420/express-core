@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express'
+import { Request } from 'express'
 import prisma from '../../config/database'
 import { paginate } from '../../utils/paginator'
 
