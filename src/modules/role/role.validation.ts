@@ -1,4 +1,4 @@
-const { z } = require('zod')
+import { z } from 'zod'
 
 const createRoleSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -14,4 +14,4 @@ const updateRoleSchema = z.object({
   access: z.array(z.string().min(1)).optional(),
 })
 
-module.exports = { createRoleSchema, updateRoleSchema }
+export { createRoleSchema, updateRoleSchema }

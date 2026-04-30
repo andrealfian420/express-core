@@ -1,12 +1,12 @@
-const express = require('express')
-const roleController = require('./role.controller')
-const { createRoleSchema, updateRoleSchema } = require('./role.validation')
-const validate = require('../../middleware/validate.middleware')
-const authMiddleware = require('../../middleware/auth.middleware')
-const checkPermission = require('../../middleware/rbac.middleware')
-const { PERMISSIONS } = require('./role.permissions')
+import { Router } from 'express'
+import roleController from './role.controller'
+import { createRoleSchema, updateRoleSchema } from './role.validation'
+import validate from '../../middleware/validate.middleware'
+import authMiddleware from '../../middleware/auth.middleware'
+import checkPermission from '../../middleware/rbac.middleware'
+import { PERMISSIONS } from './role.permissions'
 
-const router = express.Router()
+const router = Router()
 
 router.use(authMiddleware)
 
@@ -44,4 +44,4 @@ router.delete(
   roleController.destroy,
 )
 
-module.exports = router
+export default router

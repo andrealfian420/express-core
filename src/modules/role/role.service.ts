@@ -1,20 +1,22 @@
-const AppError = require('../../utils/appError')
-const roleRepository = require('./role.repository')
-const cacheService = require('../../services/cache.service')
-const { ALL_PERMISSIONS } = require('./role.permissions')
-const { makeUniqueSlug } = require('../../utils/sluggable')
-const systemService = require('../../services/system.service')
-const prisma = require('../../config/database')
+import { Request } from 'express'
+import prisma from '../../config/database'
+import { Prisma, Role } from '@prisma/client'
+import AppError from '../../utils/appError'
+import roleRepository from './role.repository'
+import cacheService from '../../services/cache.service'
+import { ALL_PERMISSIONS } from './role.permissions'
+import { makeUniqueSlug } from '../../utils/sluggable'
+import systemService from '../../services/system.service'
 
-const cacheKey = (id) => `role:${id}`
+const cacheKey = (id: string | number): string => `role:${id}`
 
 // Service layer for Role management
 class RoleService {
-  async getRoles(req) {
+  async getRoles(req: Request): Promise<any> {
     return await roleRepository.paginate(req)
   }
 
-  async getRole(slug) {
+  async getRole(slug: string): Promise<Role> {
     const role = await roleRepository.findBySlug(slug)
     if (!role) {
       throw new AppError('Role not found', 404)
@@ -23,13 +25,13 @@ class RoleService {
     return role
   }
 
-  async createRole(data, createdBy = null) {
+  async createRole(data: any, createdBy: number | null = null): Promise<Role> {
     this._validateAccess(data.access)
 
     // Use transaction to ensure role creation and activity logging are atomic
-    const role = await prisma.$transaction(async (tx) => {
+    const role = await prisma.$transaction(async (tx: any) => {
       const slug = await makeUniqueSlug(data.title, (candidate, excludeId) =>
-        roleRepository.findBySlugExcluding(candidate, excludeId, tx),
+        roleRepository.findBySlugExcluding(candidate, excludeId as number, tx),
       )
 
       const newRole = await roleRepository.create(
@@ -66,7 +68,11 @@ class RoleService {
     return role
   }
 
-  async updateRole(slug, data, updatedBy = null) {
+  async updateRole(
+    slug: string,
+    data: Prisma.RoleUpdateInput,
+    updatedBy: number | null = null,
+  ): Promise<Role> {
     const role = await roleRepository.findBySlug(slug)
 
     if (!role) {
@@ -74,18 +80,22 @@ class RoleService {
     }
 
     if (data.access) {
-      this._validateAccess(data.access)
+      this._validateAccess(data?.access as string[])
     }
 
     // Use transaction to ensure role update and activity logging are atomic
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx: any) => {
       // onUpdate: regenerate slug whenever title changes
       let newSlug
       if (data.title && data.title !== role.title) {
         newSlug = await makeUniqueSlug(
-          data.title,
+          data.title as string,
           (candidate, excludeId) =>
-            roleRepository.findBySlugExcluding(candidate, excludeId, tx),
+            roleRepository.findBySlugExcluding(
+              candidate,
+              excludeId as number,
+              tx,
+            ),
           role.id,
         )
       }
@@ -99,7 +109,7 @@ class RoleService {
           ...(data.description !== undefined && {
             description: data.description,
           }),
-          ...(data.access && { access: data.access }),
+          ...(data.access && { access: data.access as string[] }),
         },
         tx,
       )
@@ -144,7 +154,10 @@ class RoleService {
     return updated
   }
 
-  async deleteRole(slug, deletedBy = null) {
+  async deleteRole(
+    slug: string,
+    deletedBy: number | null = null,
+  ): Promise<void> {
     const role = await roleRepository.findBySlug(slug)
     if (!role) {
       throw new AppError('Role not found', 404)
@@ -160,7 +173,7 @@ class RoleService {
     }
 
     // Use transaction to ensure role deletion and activity logging are atomic
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       await roleRepository.delete(role.id, tx)
 
       // Log activity within transaction
@@ -191,7 +204,7 @@ class RoleService {
   }
 
   // Validate that all given permission values exist in ALL_PERMISSIONS
-  _validateAccess(access) {
+  _validateAccess(access: string[]): void {
     const invalid = access.filter((p) => !ALL_PERMISSIONS.includes(p))
     if (invalid.length > 0) {
       throw new AppError(
@@ -202,4 +215,4 @@ class RoleService {
   }
 }
 
-module.exports = new RoleService()
+export default new RoleService()

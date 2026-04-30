@@ -5,7 +5,22 @@
  * PERMISSIONS  – flat constant map (used in code for checkPermission())
  */
 
-const ACCESS_LIST = [
+export interface PermissionActivity {
+  label: string
+  value: string
+}
+
+export interface PermissionSubModule {
+  module: string
+  activities: PermissionActivity[]
+}
+
+export interface PermissionModule {
+  module: string
+  sub_module: PermissionSubModule[]
+}
+
+const ACCESS_LIST: PermissionModule[] = [
   {
     module: 'Dashboard',
     sub_module: [
@@ -83,11 +98,11 @@ const PERMISSIONS = {
     INDEX: 'module.activity-log.index',
     DETAIL: 'module.activity-log.detail',
   },
-}
+} as const
 
 // Derive a flat array of all valid permission values from ACCESS_LIST
-const ALL_PERMISSIONS = ACCESS_LIST.flatMap((mod) =>
+const ALL_PERMISSIONS: string[] = ACCESS_LIST.flatMap((mod) =>
   mod.sub_module.flatMap((sub) => sub.activities.map((a) => a.value)),
 )
 
-module.exports = { ACCESS_LIST, PERMISSIONS, ALL_PERMISSIONS }
+export { ACCESS_LIST, PERMISSIONS, ALL_PERMISSIONS }

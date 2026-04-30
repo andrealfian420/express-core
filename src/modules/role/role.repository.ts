@@ -1,8 +1,10 @@
-const prisma = require('../../config/database')
-const { paginate } = require('../../utils/paginator')
+import { Request } from 'express'
+import { Prisma, Role } from '@prisma/client'
+import prisma from '../../config/database'
+import { paginate } from '../../utils/paginator'
 
 class RoleRepository {
-  async paginate(req) {
+  async paginate(req: Request): Promise<any> {
     return await paginate(
       prisma.role,
       {
@@ -23,21 +25,25 @@ class RoleRepository {
     )
   }
 
-  async findById(id, txOrPrisma = null) {
+  async findById(id: number, txOrPrisma: any = null): Promise<Role | null> {
     const db = txOrPrisma || prisma
     return await db.role.findFirst({
       where: { id, deletedAt: null },
     })
   }
 
-  async findBySlug(slug, txOrPrisma = null) {
+  async findBySlug(slug: string, txOrPrisma: any = null): Promise<Role | null> {
     const db = txOrPrisma || prisma
     return await db.role.findFirst({
       where: { slug, deletedAt: null },
     })
   }
 
-  async findBySlugExcluding(slug, excludeId = null, txOrPrisma = null) {
+  async findBySlugExcluding(
+    slug: string,
+    excludeId: number | null = null,
+    txOrPrisma: any = null,
+  ): Promise<Role | null> {
     const db = txOrPrisma || prisma
     return await db.role.findFirst({
       where: {
@@ -48,12 +54,19 @@ class RoleRepository {
     })
   }
 
-  async create(data, txOrPrisma = null) {
+  async create(
+    data: Prisma.RoleCreateInput,
+    txOrPrisma: any = null,
+  ): Promise<Role> {
     const db = txOrPrisma || prisma
     return await db.role.create({ data })
   }
 
-  async update(id, data, txOrPrisma = null) {
+  async update(
+    id: number,
+    data: Prisma.RoleUpdateInput,
+    txOrPrisma: any = null,
+  ): Promise<Role> {
     const db = txOrPrisma || prisma
     return await db.role.update({
       where: { id },
@@ -61,14 +74,14 @@ class RoleRepository {
     })
   }
 
-  async delete(id, txOrPrisma = null) {
+  async delete(id: number, txOrPrisma: any = null): Promise<Role> {
     const db = txOrPrisma || prisma
     return await db.role.delete({
       where: { id },
     })
   }
 
-  async countUsers(roleId, txOrPrisma = null) {
+  async countUsers(roleId: number, txOrPrisma: any = null): Promise<number> {
     const db = txOrPrisma || prisma
     return await db.user.count({
       where: { roleId, deletedAt: null },
@@ -76,4 +89,4 @@ class RoleRepository {
   }
 }
 
-module.exports = new RoleRepository()
+export default new RoleRepository()
