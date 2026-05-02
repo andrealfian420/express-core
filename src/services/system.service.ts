@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import prisma from '../config/database'
 import logger from '../config/logger'
 import { PrismaTx } from '../types/prisma'
@@ -57,8 +58,8 @@ class SystemService {
     subjectType: string,
     subjectId: number | null = null,
     description: string | null = null,
-    oldData: any = null,
-    newData: any = null,
+    oldData: Prisma.InputJsonValue | null = null,
+    newData: Prisma.InputJsonValue | null = null,
     txOrPrisma: PrismaTx | null = null,
   ): Promise<void> {
     try {
