@@ -5,12 +5,7 @@
     "rootDir": "./src",
     "outDir": "./dist",
 
-    // Allow JavaScript files to be compiled.
-    // Useful when migrating a JavaScript project to TypeScript incrementally.
-    "allowJs": true,
-
-    // Enable interoperability between CommonJS and ES Modules.
-    "esModuleInterop": true,
+    "allowJs": false,
 
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
