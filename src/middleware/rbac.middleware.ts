@@ -17,10 +17,12 @@ const USER_ROLE_CACHE_TTL = 300 // 5 minutes
 const checkPermission = (permission: string) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user?.sub
-      if (!userId) {
+      const rawUserId = req.user?.sub
+      if (!rawUserId) {
         return next(new AppError('Unauthorized access', 401))
       }
+
+      const userId = Number(rawUserId)
 
       const cacheKey = `user-role:${userId}`
       let userData: CachedUserData | null = await cacheService.get(cacheKey)
