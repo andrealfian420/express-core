@@ -7,12 +7,13 @@ import cacheService from '../../services/cache.service'
 import { ALL_PERMISSIONS } from './role.permissions'
 import { makeUniqueSlug } from '../../utils/sluggable'
 import systemService from '../../services/system.service'
+import { PaginatedResult } from '../../utils/paginator'
 
 const cacheKey = (id: string | number): string => `role:${id}`
 
 // Service layer for Role management
 class RoleService {
-  async getRoles(req: Request): Promise<any> {
+  async getRoles(req: Request): Promise<PaginatedResult<Role>> {
     return await roleRepository.getRoles(req)
   }
 

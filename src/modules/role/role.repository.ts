@@ -1,11 +1,11 @@
 import { Request } from 'express'
 import { Prisma, Role } from '@prisma/client'
 import prisma from '../../config/database'
-import { paginate } from '../../utils/paginator'
+import { paginate, PaginatedResult } from '../../utils/paginator'
 
 class RoleRepository {
-  async getRoles(req: Request): Promise<any> {
-    return await paginate(
+  async getRoles(req: Request): Promise<PaginatedResult<Role>> {
+    return await paginate<Role>(
       prisma.role,
       {
         where: { deletedAt: null },

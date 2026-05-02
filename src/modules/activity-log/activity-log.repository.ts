@@ -1,12 +1,15 @@
 import { Request } from 'express'
 import prisma from '../../config/database'
-import { paginate } from '../../utils/paginator'
+import { paginate, PaginatedResult } from '../../utils/paginator'
 import { ActivityLogData } from './activity-log.types'
+import { ActivityLog } from '@prisma/client'
 
 // ActivityLogRepository handles all database operations related to the ActivityLog model
 class ActivityLogRepository {
-  async getActivityLogs(req: Request): Promise<any> {
-    return await paginate(
+  async getActivityLogs(
+    req: Request,
+  ): Promise<PaginatedResult<ActivityLogData>> {
+    return await paginate<ActivityLog, ActivityLogData>(
       prisma.activityLog,
       {
         select: {
@@ -30,7 +33,7 @@ class ActivityLogRepository {
         allowedSorts: ['createdAt', 'action'],
 
         // optional transform function to modify each data item before returning
-        transform: (log: any) => ({
+        transform: (log: ActivityLogData) => ({
           actionType: log.action,
           causedAt: log.createdAt.toLocaleString('en-GB', {
             day: 'numeric',
@@ -73,8 +76,11 @@ class ActivityLogRepository {
     })
   }
 
-  async findByUserId(userId: number, req: Request): Promise<any> {
-    return await paginate(
+  async findByUserId(
+    userId: number,
+    req: Request,
+  ): Promise<PaginatedResult<ActivityLogData>> {
+    return await paginate<ActivityLog, ActivityLogData>(
       prisma.activityLog,
       {
         where: { userId },
@@ -97,7 +103,7 @@ class ActivityLogRepository {
         },
         searchFields: ['action', 'description', 'subjectType'],
         allowedSorts: ['action', 'createdAt'],
-        transform: (log: any) => ({
+        transform: (log: ActivityLogData) => ({
           actionType: log.action,
           causedAt: log.createdAt.toLocaleString('en-GB', {
             day: 'numeric',

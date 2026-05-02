@@ -1,13 +1,13 @@
 import { Request } from 'express'
 import prisma from '../../config/database'
 import { Prisma, User } from '@prisma/client'
-import { paginate } from '../../utils/paginator'
-import { UserProfileData } from '../user/user.types'
+import { paginate, PaginatedResult } from '../../utils/paginator'
+import { UserListData, UserProfileData } from '../user/user.types'
 
 // UserRepository handles all database operations related to the User model
 class UserRepository {
-  async getUsers(req: Request): Promise<any> {
-    return await paginate(
+  async getUsers(req: Request): Promise<PaginatedResult<UserListData>> {
+    return await paginate<UserListData>(
       prisma.user,
       {
         where: { deletedAt: null },
@@ -32,7 +32,7 @@ class UserRepository {
         allowedSorts: ['createdAt', 'name', 'email'],
 
         // optional transform function to modify each data item before returning
-        transform: (user) => ({
+        transform: (user: UserListData) => ({
           ...user,
           roleName: user.role ? user.role.title : '-',
           registeredAt: user.createdAt.toLocaleString('en-GB', {

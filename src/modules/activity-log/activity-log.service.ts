@@ -2,10 +2,13 @@ import { Request } from 'express'
 import AppError from '../../utils/appError'
 import activityLogRepository from './activity-log.repository'
 import { ActivityLogData } from './activity-log.types'
+import { PaginatedResult } from '../../utils/paginator'
 
 // ActivityLogService contains business logic related to activity logs.
 class ActivityLogService {
-  async getActivityLogs(req: Request): Promise<any> {
+  async getActivityLogs(
+    req: Request,
+  ): Promise<PaginatedResult<ActivityLogData>> {
     return await activityLogRepository.getActivityLogs(req)
   }
 
@@ -26,7 +29,10 @@ class ActivityLogService {
     return activityLog
   }
 
-  async getActivityLogsByUserId(userId: number, req: Request): Promise<any> {
+  async getActivityLogsByUserId(
+    userId: number,
+    req: Request,
+  ): Promise<PaginatedResult<ActivityLogData>> {
     return await activityLogRepository.findByUserId(userId, req)
   }
 }

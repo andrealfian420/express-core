@@ -9,6 +9,7 @@ export type UserProfileData = Prisma.UserGetPayload<{
     avatar: true
     isEmailVerified: true
     roleId: true
+    createdAt: true
     role: {
       select: {
         title: true
@@ -18,4 +19,26 @@ export type UserProfileData = Prisma.UserGetPayload<{
   }
 }> & {
   avatarUrl?: string
+}
+
+export type UserListData = Prisma.UserGetPayload<{
+  select: {
+    id: true
+    name: true
+    slug: true
+    email: true
+    isEmailVerified: true
+    createdAt: true
+    role: {
+      select: {
+        id: true
+        title: true
+        slug: true
+        userType: true
+      }
+    }
+  }
+}> & {
+  roleName?: string
+  registeredAt?: string
 }
