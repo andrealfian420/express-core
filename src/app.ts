@@ -1,4 +1,4 @@
-import express, {Request, Response, NextFunction} from 'express'
+import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import compression from 'compression'
@@ -10,12 +10,10 @@ import helmetConfig from './config/helmet'
 import errorHandler from './middleware/error.middleware'
 import hpp from 'hpp'
 import xssMiddleware from './middleware/xss.middleware'
-import dotenv from 'dotenv'
+import 'dotenv/config'
 
-dotenv.config()
-
-const routes = require('./routes')
-const cookieParser = require('cookie-parser')
+import routes from './routes'
+import cookieParser from 'cookie-parser'
 
 const app = express()
 app.set('trust proxy', 1)

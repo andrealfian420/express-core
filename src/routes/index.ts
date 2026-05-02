@@ -26,7 +26,7 @@ router.use('/roles', roleRoutes)
 router.use('/activity-logs', activityLogRoutes)
 router.use('/utils', helperRoutes)
 
-router.get('/', (req: Request, res: Response) => {
+router.get('/', (req: Request, res: Response): void => {
   res.status(404).json({ message: 'Not Found' })
 })
 
