@@ -8,6 +8,7 @@ import { ALL_PERMISSIONS } from './role.permissions'
 import { makeUniqueSlug } from '../../utils/sluggable'
 import systemService from '../../services/system.service'
 import { PaginatedResult } from '../../utils/paginator'
+import { PrismaTx } from '../../types/prisma'
 
 const cacheKey = (id: string | number): string => `role:${id}`
 
@@ -26,11 +27,14 @@ class RoleService {
     return role
   }
 
-  async createRole(data: any, createdBy: number | null = null): Promise<Role> {
-    this._validateAccess(data.access)
+  async createRole(
+    data: Prisma.RoleCreateInput,
+    createdBy: number | null = null,
+  ): Promise<Role> {
+    this._validateAccess(data.access as string[])
 
     // Use transaction to ensure role creation and activity logging are atomic
-    const role = await prisma.$transaction(async (tx: any) => {
+    const role = await prisma.$transaction(async (tx: PrismaTx) => {
       const slug = await makeUniqueSlug(data.title, (candidate, excludeId) =>
         roleRepository.findBySlugExcluding(candidate, excludeId as number, tx),
       )
@@ -85,7 +89,7 @@ class RoleService {
     }
 
     // Use transaction to ensure role update and activity logging are atomic
-    const updated = await prisma.$transaction(async (tx: any) => {
+    const updated = await prisma.$transaction(async (tx: PrismaTx) => {
       // onUpdate: regenerate slug whenever title changes
       let newSlug
       if (data.title && data.title !== role.title) {
@@ -174,7 +178,7 @@ class RoleService {
     }
 
     // Use transaction to ensure role deletion and activity logging are atomic
-    await prisma.$transaction(async (tx: any) => {
+    await prisma.$transaction(async (tx: PrismaTx) => {
       await roleRepository.delete(role.id, tx)
 
       // Log activity within transaction

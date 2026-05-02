@@ -9,6 +9,7 @@ import prisma from '../../config/database'
 import storageService from '../../services/storage.service'
 import { Prisma, User } from '@prisma/client'
 import { UserProfileData } from '../user/user.types'
+import { PrismaTx } from '../../types/prisma'
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10')
 
@@ -50,7 +51,7 @@ class UserService {
     createdBy: number | null = null,
   ): Promise<User> {
     // Use transaction to ensure user creation and activity logging are atomic
-    const user = await prisma.$transaction(async (tx: any) => {
+    const user = await prisma.$transaction(async (tx: PrismaTx) => {
       const existingUser = await userRepository.findByEmail(
         data.email as string,
         tx,
@@ -124,7 +125,7 @@ class UserService {
     }
 
     // Use transaction to ensure user update and activity logging are atomic
-    const updated = await prisma.$transaction(async (tx: any) => {
+    const updated = await prisma.$transaction(async (tx: PrismaTx) => {
       // onUpdate: regenerate slug whenever name changes
       let newSlug
       if (data.name && data.name !== user.name) {
@@ -210,7 +211,7 @@ class UserService {
     }
 
     // Use transaction to ensure user deletion and activity logging are atomic
-    await prisma.$transaction(async (tx: any) => {
+    await prisma.$transaction(async (tx: PrismaTx) => {
       await userRepository.delete(user.id, tx)
 
       // Log activity within transaction

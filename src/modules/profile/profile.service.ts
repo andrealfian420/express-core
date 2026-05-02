@@ -9,6 +9,7 @@ import { makeUniqueSlug } from '../../utils/sluggable'
 import bcrypt from 'bcryptjs'
 import authRepository from '../auth/auth.repository'
 import { UserProfileData } from '../user/user.types'
+import { PrismaTx } from '../../types/prisma'
 
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 10)
 
@@ -64,7 +65,7 @@ class ProfileService {
       }
     }
 
-    const updatedProfile = await prisma.$transaction(async (tx: any) => {
+    const updatedProfile = await prisma.$transaction(async (tx: PrismaTx) => {
       // onUpdate: regenerate slug whenever name changes
       let newSlug
       if (data.name && data.name !== existingProfile.name) {

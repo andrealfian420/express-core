@@ -10,6 +10,8 @@ import logger from '../../config/logger'
 import { makeUniqueSlug } from '../../utils/sluggable'
 import userRepository from '../user/user.repository'
 import cacheService from '../../services/cache.service'
+import { PrismaTx } from '../../types/prisma'
+import { AuthTokens } from './auth.types'
 
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS) || 10
 const REFRESH_TOKEN_EXPIRES_DAYS =
@@ -25,7 +27,7 @@ class AuthService {
     userData: Prisma.UserUncheckedCreateInput,
   ): Promise<{ user: any; token: string }> {
     // Use transaction to ensure user and verification token are created atomically
-    const result = await prisma.$transaction(async (tx: any) => {
+    const result = await prisma.$transaction(async (tx: PrismaTx) => {
       const existingUser = await authRepository.findUserByEmail(
         userData.email as string,
         tx,
@@ -47,7 +49,7 @@ class AuthService {
             where: {
               slug: candidate,
               deletedAt: null,
-              ...(excludeId ? { id: { not: excludeId } } : {}),
+              ...(excludeId ? { id: { not: Number(excludeId) } } : {}),
             },
           }),
       )
@@ -89,7 +91,7 @@ class AuthService {
     return result
   }
 
-  async login(email: string, password: string): Promise<{accessToken: string; refreshToken: string}> {
+  async login(email: string, password: string): Promise<AuthTokens> {
     const user = await authRepository.findUserByEmail(email)
 
     if (!user || !user.isEmailVerified) {
@@ -118,13 +120,13 @@ class AuthService {
     return { accessToken, refreshToken }
   }
 
-  async refreshAccessToken(token: string): Promise<{ accessToken: string; refreshToken: string }> {
+  async refreshAccessToken(token: string): Promise<AuthTokens> {
     if (!token) {
       throw new AppError('Refresh token required', 401)
     }
 
     // Use transaction to ensure token rotation is atomic (delete old token and create new one)
-    return await prisma.$transaction(async (tx: any) => {
+    return await prisma.$transaction(async (tx: PrismaTx) => {
       const record = await authRepository.findRefreshToken(token, tx)
 
       if (!record) {
@@ -170,7 +172,7 @@ class AuthService {
 
   async verifyEmail(token: string): Promise<void> {
     // Use transaction to ensure user update and token deletion are atomic
-    const user = await prisma.$transaction(async (tx: any) => {
+    const user = await prisma.$transaction(async (tx: PrismaTx) => {
       const record = await tx.emailVerificationToken.findUnique({
         where: {
           token: token,
@@ -249,7 +251,7 @@ class AuthService {
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
     // Use transaction to ensure password update and token marking are atomic
-    const userId = await prisma.$transaction(async (tx: any) => {
+    const userId = await prisma.$transaction(async (tx: PrismaTx) => {
       const record = await authRepository.findUniqueToken(token, tx)
 
       if (!record) {
