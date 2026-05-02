@@ -6,7 +6,7 @@ import { UserProfileData } from '../user/user.types'
 
 // UserRepository handles all database operations related to the User model
 class UserRepository {
-  async paginate(req: Request): Promise<any> {
+  async getUsers(req: Request): Promise<any> {
     return await paginate(
       prisma.user,
       {

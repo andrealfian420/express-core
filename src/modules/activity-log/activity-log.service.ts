@@ -6,7 +6,7 @@ import { ActivityLogData } from './activity-log.types'
 // ActivityLogService contains business logic related to activity logs.
 class ActivityLogService {
   async getActivityLogs(req: Request): Promise<any> {
-    return await activityLogRepository.paginate(req)
+    return await activityLogRepository.getActivityLogs(req)
   }
 
   async getActivityLogById(id: number): Promise<ActivityLogData> {

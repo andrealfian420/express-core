@@ -15,7 +15,7 @@ const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10')
 // UserService contains business logic related to users.
 class UserService {
   async getUsers(req: Request): Promise<any> {
-    return await userRepository.paginate(req)
+    return await userRepository.getUsers(req)
   }
 
   async getUserBySlug(slug: string): Promise<UserProfileData> {

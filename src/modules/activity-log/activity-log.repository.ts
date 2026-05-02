@@ -5,7 +5,7 @@ import { ActivityLogData } from './activity-log.types'
 
 // ActivityLogRepository handles all database operations related to the ActivityLog model
 class ActivityLogRepository {
-  async paginate(req: Request): Promise<any> {
+  async getActivityLogs(req: Request): Promise<any> {
     return await paginate(
       prisma.activityLog,
       {

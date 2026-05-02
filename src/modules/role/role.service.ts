@@ -13,7 +13,7 @@ const cacheKey = (id: string | number): string => `role:${id}`
 // Service layer for Role management
 class RoleService {
   async getRoles(req: Request): Promise<any> {
-    return await roleRepository.paginate(req)
+    return await roleRepository.getRoles(req)
   }
 
   async getRole(slug: string): Promise<Role | null> {

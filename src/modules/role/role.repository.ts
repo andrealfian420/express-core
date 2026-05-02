@@ -4,7 +4,7 @@ import prisma from '../../config/database'
 import { paginate } from '../../utils/paginator'
 
 class RoleRepository {
-  async paginate(req: Request): Promise<any> {
+  async getRoles(req: Request): Promise<any> {
     return await paginate(
       prisma.role,
       {
