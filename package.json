@@ -4,7 +4,7 @@
   "main": "server.js",
   "scripts": {
     "dev": "concurrently \"ts-node-dev --respawn --transpile-only src/server.ts\" \"ts-node-dev --respawn --transpile-only src/jobs/run-workers.ts\"",
-    "build": "tsc",
+    "build": "tsc --diagnostics",
     "start": "node dist/server.js",
     "start:worker": "node dist/jobs/run-workers.js",
     "lint": "eslint . --ext .js,.ts"
