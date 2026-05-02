@@ -1,6 +1,7 @@
 import { Request } from 'express'
 import AppError from '../../utils/appError'
 import activityLogRepository from './activity-log.repository'
+import { ActivityLogData } from './activity-log.types'
 
 // ActivityLogService contains business logic related to activity logs.
 class ActivityLogService {
@@ -8,7 +9,7 @@ class ActivityLogService {
     return await activityLogRepository.paginate(req)
   }
 
-  async getActivityLogById(id: number): Promise<any> {
+  async getActivityLogById(id: number): Promise<ActivityLogData> {
     const activityLog = await activityLogRepository.findById(id)
     if (!activityLog) {
       throw new AppError('Activity log not found', 404)

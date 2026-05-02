@@ -16,7 +16,7 @@ class RoleService {
     return await roleRepository.paginate(req)
   }
 
-  async getRole(slug: string): Promise<Role> {
+  async getRole(slug: string): Promise<Role | null> {
     const role = await roleRepository.findBySlug(slug)
     if (!role) {
       throw new AppError('Role not found', 404)

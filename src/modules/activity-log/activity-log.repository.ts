@@ -1,6 +1,7 @@
 import { Request } from 'express'
 import prisma from '../../config/database'
 import { paginate } from '../../utils/paginator'
+import { ActivityLogData } from './activity-log.types'
 
 // ActivityLogRepository handles all database operations related to the ActivityLog model
 class ActivityLogRepository {
@@ -45,7 +46,10 @@ class ActivityLogRepository {
     )
   }
 
-  async findById(id: number, txOrPrisma: any = null): Promise<any> {
+  async findById(
+    id: number,
+    txOrPrisma: any = null,
+  ): Promise<ActivityLogData | null> {
     const db = txOrPrisma || prisma
     return await db.activityLog.findFirst({
       where: { id },

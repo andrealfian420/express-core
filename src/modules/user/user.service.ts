@@ -8,7 +8,7 @@ import systemService from '../../services/system.service'
 import prisma from '../../config/database'
 import storageService from '../../services/storage.service'
 import { Prisma, User } from '@prisma/client'
-import { UserProfileResponse } from '../user/user.types'
+import { UserProfileData } from '../user/user.types'
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10')
 
@@ -18,7 +18,7 @@ class UserService {
     return await userRepository.paginate(req)
   }
 
-  async getUserBySlug(slug: string): Promise<UserProfileResponse> {
+  async getUserBySlug(slug: string): Promise<UserProfileData> {
     const user = await userRepository.find(slug)
 
     if (!user) {

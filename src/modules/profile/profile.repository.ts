@@ -1,12 +1,12 @@
 import { Prisma, User } from '@prisma/client'
 import prisma from '../../config/database'
-import { UserProfileResponse } from '../user/user.types'
+import { UserProfileData } from '../user/user.types'
 
 class ProfileRepository {
   async getProfile(
     userId: number,
     txOrPrisma: any = null,
-  ): Promise<UserProfileResponse | null> {
+  ): Promise<UserProfileData | null> {
     const db = txOrPrisma || prisma
     return await db.user.findFirst({
       where: {

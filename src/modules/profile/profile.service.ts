@@ -8,7 +8,7 @@ import userRepository from '../user/user.repository'
 import { makeUniqueSlug } from '../../utils/sluggable'
 import bcrypt from 'bcryptjs'
 import authRepository from '../auth/auth.repository'
-import { UserProfileResponse } from '../user/user.types'
+import { UserProfileData } from '../user/user.types'
 
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 10)
 
@@ -20,11 +20,11 @@ export interface UpdateProfileInput {
 }
 
 class ProfileService {
-  async getProfile(userId: number): Promise<UserProfileResponse> {
+  async getProfile(userId: number): Promise<UserProfileData> {
     const cacheKey = `profile:${userId}`
     const cachedProfile = (await cacheService.get(
       cacheKey,
-    )) as UserProfileResponse | null
+    )) as UserProfileData | null
 
     if (cachedProfile) {
       return cachedProfile
@@ -51,7 +51,7 @@ class ProfileService {
   async updateProfile(
     userId: number,
     data: UpdateProfileInput,
-  ): Promise<UserProfileResponse> {
+  ): Promise<UserProfileData> {
     const existingProfile = await profileRepository.getProfile(userId)
 
     if (!existingProfile) {

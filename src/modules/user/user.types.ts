@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client'
 
-export type UserProfileResponse = Prisma.UserGetPayload<{
+export type UserProfileData = Prisma.UserGetPayload<{
   select: {
     id: true
     slug: true
