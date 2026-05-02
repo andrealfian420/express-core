@@ -8,7 +8,7 @@ import userRepository from '../user/user.repository'
 import { makeUniqueSlug } from '../../utils/sluggable'
 import bcrypt from 'bcryptjs'
 import authRepository from '../auth/auth.repository'
-import { UserProfileResponse } from '../../types/user'
+import { UserProfileResponse } from '../user/user.types'
 
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 10)
 

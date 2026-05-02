@@ -8,7 +8,7 @@ import systemService from '../../services/system.service'
 import prisma from '../../config/database'
 import storageService from '../../services/storage.service'
 import { Prisma, User } from '@prisma/client'
-import { UserProfileResponse } from '../../types/user'
+import { UserProfileResponse } from '../user/user.types'
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10')
 

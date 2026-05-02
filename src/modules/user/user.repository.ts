@@ -2,7 +2,7 @@ import { Request } from 'express'
 import prisma from '../../config/database'
 import { Prisma, User } from '@prisma/client'
 import { paginate } from '../../utils/paginator'
-import { UserProfileResponse } from '../../types/user'
+import { UserProfileResponse } from '../user/user.types'
 
 // UserRepository handles all database operations related to the User model
 class UserRepository {
