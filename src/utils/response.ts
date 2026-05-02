@@ -2,10 +2,11 @@ import { Response } from 'express'
 
 /*
  * Utility function to send standardized JSON responses
+  Using <T> to allow for generic typing of the data payload
  */
-const response = (
+const response = <T>(
   res: Response,
-  data: any = null,
+  data: T | null = null,
   message: string = 'OK',
   statusCode: number = 200,
 ) => {
