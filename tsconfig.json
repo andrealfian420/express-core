@@ -15,13 +15,24 @@
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
     "module": "commonjs",
-    "target": "ES6",
+    "target": "ES2020",
+    "lib": ["ES2020"],
 
     // Enable all strict type-checking options.
     "strict": true,
 
     // Include type definitions from the specified directories.
     // This allows TypeScript to recognize custom types defined in the project, as well as types from installed packages.
+    "types": ["node"],
     "typeRoots": ["./node_modules/@types", "./src/types"]
-  }
+  },
+  "include": ["src/**/*", "src/types/**/*"], // tell TS to only compile files in the src directory and types directory
+  "exclude": [
+    // Exclude files and directories that should not be compiled by TypeScript.
+    "node_modules",
+    "dist",
+    "ecosystem.config.js",
+    "eslint.config.mjs",
+    "prisma/**/*"
+  ]
 }
