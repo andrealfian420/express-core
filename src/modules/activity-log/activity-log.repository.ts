@@ -3,6 +3,7 @@ import prisma from '../../config/database'
 import { paginate, PaginatedResult } from '../../utils/paginator'
 import { ActivityLogData } from './activity-log.types'
 import { ActivityLog } from '@prisma/client'
+import { PrismaTx } from '../../types/prisma'
 
 // ActivityLogRepository handles all database operations related to the ActivityLog model
 class ActivityLogRepository {
@@ -51,7 +52,7 @@ class ActivityLogRepository {
 
   async findById(
     id: number,
-    txOrPrisma: any = null,
+    txOrPrisma: PrismaTx | null = null,
   ): Promise<ActivityLogData | null> {
     const db = txOrPrisma || prisma
     return await db.activityLog.findFirst({

@@ -3,6 +3,7 @@ import prisma from '../../config/database'
 import { Prisma, User } from '@prisma/client'
 import { paginate, PaginatedResult } from '../../utils/paginator'
 import { UserListData, UserProfileData } from '../user/user.types'
+import { PrismaTx } from '../../types/prisma'
 
 // UserRepository handles all database operations related to the User model
 class UserRepository {
@@ -50,7 +51,7 @@ class UserRepository {
 
   async find(
     slug: string,
-    txOrPrisma: any = null,
+    txOrPrisma: PrismaTx | null = null,
   ): Promise<UserProfileData | null> {
     const db = txOrPrisma || prisma
     return await db.user.findFirst({
@@ -69,7 +70,7 @@ class UserRepository {
 
   async findByEmail(
     email: string,
-    txOrPrisma: any = null,
+    txOrPrisma: PrismaTx | null = null,
   ): Promise<User | null> {
     const db = txOrPrisma || prisma
     return await db.user.findFirst({
@@ -83,7 +84,7 @@ class UserRepository {
   async findBySlugExcluding(
     slug: string,
     excludeId: string | number | null = null,
-    txOrPrisma: any = null,
+    txOrPrisma: PrismaTx | null = null,
   ): Promise<User | null> {
     const db = txOrPrisma || prisma
     return await db.user.findFirst({
@@ -97,7 +98,7 @@ class UserRepository {
 
   async create(
     data: Prisma.UserUncheckedCreateInput,
-    txOrPrisma: any = null,
+    txOrPrisma: PrismaTx | null = null,
   ): Promise<User> {
     const db = txOrPrisma || prisma
     return await db.user.create({
@@ -108,7 +109,7 @@ class UserRepository {
   async update(
     id: number,
     data: Prisma.UserUpdateInput,
-    txOrPrisma: any = null,
+    txOrPrisma: PrismaTx | null = null,
   ): Promise<User> {
     const db = txOrPrisma || prisma
     return await db.user.update({
@@ -117,7 +118,7 @@ class UserRepository {
     })
   }
 
-  async delete(id: number, txOrPrisma: any = null): Promise<void> {
+  async delete(id: number, txOrPrisma: PrismaTx | null = null): Promise<void> {
     const db = txOrPrisma || prisma
     await db.user.delete({
       where: { id },
