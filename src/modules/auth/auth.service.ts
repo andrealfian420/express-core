@@ -11,7 +11,7 @@ import { makeUniqueSlug } from '../../utils/sluggable'
 import userRepository from '../user/user.repository'
 import cacheService from '../../services/cache.service'
 import { PrismaTx } from '../../types/prisma'
-import { AuthTokens } from './auth.types'
+import { AuthTokens, RegisterData } from './auth.types'
 
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS) || 10
 const REFRESH_TOKEN_EXPIRES_DAYS =
@@ -25,7 +25,7 @@ const PASSWORD_RESET_EXPIRES_MINUTES =
 class AuthService {
   async register(
     userData: Prisma.UserUncheckedCreateInput,
-  ): Promise<{ user: any; token: string }> {
+  ): Promise<RegisterData> {
     // Use transaction to ensure user and verification token are created atomically
     const result = await prisma.$transaction(async (tx: PrismaTx) => {
       const existingUser = await authRepository.findUserByEmail(
@@ -64,6 +64,8 @@ class AuthService {
         tx,
       )
 
+      const { password, ...safeUserData } = user
+
       const token = generateToken()
 
       await tx.emailVerificationToken.create({
@@ -76,7 +78,7 @@ class AuthService {
         },
       })
 
-      return { user, token }
+      return { user: safeUserData }
     })
 
     // Add email sending job to the queue AFTER transaction succeeds
