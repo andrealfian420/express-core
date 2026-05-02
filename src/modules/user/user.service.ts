@@ -1,19 +1,24 @@
-const AppError = require('../../utils/appError')
-const userRepository = require('./user.repository')
-const bcrypt = require('bcryptjs')
-const cacheService = require('../../services/cache.service')
-const { makeUniqueSlug } = require('../../utils/sluggable')
-const systemService = require('../../services/system.service')
-const prisma = require('../../config/database')
-const storageService = require('../../services/storage.service')
+import { Request } from 'express'
+import AppError from '../../utils/appError'
+import userRepository from './user.repository'
+import bcrypt from 'bcryptjs'
+import cacheService from '../../services/cache.service'
+import { makeUniqueSlug } from '../../utils/sluggable'
+import systemService from '../../services/system.service'
+import prisma from '../../config/database'
+import storageService from '../../services/storage.service'
+import { Prisma, User } from '@prisma/client'
+import { UserProfileResponse } from '../../types/user'
+
+const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10')
 
 // UserService contains business logic related to users.
 class UserService {
-  async getUsers(req) {
+  async getUsers(req: Request): Promise<any> {
     return await userRepository.paginate(req)
   }
 
-  async getUserBySlug(slug) {
+  async getUserBySlug(slug: string): Promise<UserProfileResponse> {
     const user = await userRepository.find(slug)
 
     if (!user) {
@@ -30,7 +35,7 @@ class UserService {
     return user
   }
 
-  async getUserByEmail(email) {
+  async getUserByEmail(email: string): Promise<User> {
     const user = await userRepository.findByEmail(email)
 
     if (!user) {
@@ -40,21 +45,29 @@ class UserService {
     return user
   }
 
-  async createUser(data, createdBy = null) {
+  async createUser(
+    data: Prisma.UserUncheckedCreateInput,
+    createdBy: number | null = null,
+  ): Promise<User> {
     // Use transaction to ensure user creation and activity logging are atomic
-    const user = await prisma.$transaction(async (tx) => {
-      const existingUser = await userRepository.findByEmail(data.email, tx)
+    const user = await prisma.$transaction(async (tx: any) => {
+      const existingUser = await userRepository.findByEmail(
+        data.email as string,
+        tx,
+      )
       if (existingUser) {
         throw new AppError('Email already in use', 400)
       }
 
-      const slug = await makeUniqueSlug(data.name, (candidate, excludeId) =>
-        userRepository.findBySlugExcluding(candidate, excludeId, tx),
+      const slug = await makeUniqueSlug(
+        data.name as string,
+        (candidate, excludeId) =>
+          userRepository.findBySlugExcluding(candidate, excludeId, tx),
       )
 
       const hashedPassword = await bcrypt.hash(
-        data.password,
-        parseInt(process.env.BCRYPT_ROUNDS),
+        data.password as string,
+        BCRYPT_ROUNDS,
       )
 
       const newUser = await userRepository.create(
@@ -63,7 +76,7 @@ class UserService {
           isEmailVerified: true,
           slug,
           password: hashedPassword,
-          roleId: parseInt(data.roleId),
+          roleId: Number(data.roleId),
         },
         tx,
       )
@@ -92,14 +105,18 @@ class UserService {
     return user
   }
 
-  async updateUser(slug, data, updatedBy = null) {
+  async updateUser(
+    slug: string,
+    data: Prisma.UserUncheckedUpdateInput,
+    updatedBy: number | null = null,
+  ): Promise<User> {
     const user = await userRepository.find(slug)
     if (!user) {
       throw new AppError('User not found', 404)
     }
 
     if (data.email && data.email !== user.email) {
-      const existing = await userRepository.findByEmail(data.email)
+      const existing = await userRepository.findByEmail(data.email as string)
 
       if (existing) {
         throw new AppError('Email already in use', 400)
@@ -107,12 +124,12 @@ class UserService {
     }
 
     // Use transaction to ensure user update and activity logging are atomic
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx: any) => {
       // onUpdate: regenerate slug whenever name changes
       let newSlug
       if (data.name && data.name !== user.name) {
         newSlug = await makeUniqueSlug(
-          data.name,
+          data.name as string,
           (candidate, excludeId) =>
             userRepository.findBySlugExcluding(candidate, excludeId, tx),
           user.id,
@@ -127,8 +144,8 @@ class UserService {
       // Hash new password if provided
       if (data.password) {
         data.password = await bcrypt.hash(
-          data.password,
-          parseInt(process.env.BCRYPT_ROUNDS),
+          data.password as string,
+          BCRYPT_ROUNDS,
         )
       }
 
@@ -138,7 +155,7 @@ class UserService {
           ...(data.name && { name: data.name }),
           ...(newSlug && { slug: newSlug }),
           ...(data.email && { email: data.email }),
-          ...(data.roleId && { roleId: parseInt(data.roleId) }),
+          ...(data.roleId && { roleId: Number(data.roleId) }),
           ...(data.avatar && { avatar: data.avatar }),
           ...(data.password && { password: data.password }),
         },
@@ -179,7 +196,10 @@ class UserService {
     return updated
   }
 
-  async deleteUser(slug, deletedBy = null) {
+  async deleteUser(
+    slug: string,
+    deletedBy: number | null = null,
+  ): Promise<void> {
     const user = await userRepository.find(slug)
     if (!user) {
       throw new AppError('User not found', 404)
@@ -190,7 +210,7 @@ class UserService {
     }
 
     // Use transaction to ensure user deletion and activity logging are atomic
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       await userRepository.delete(user.id, tx)
 
       // Log activity within transaction
@@ -215,4 +235,4 @@ class UserService {
   }
 }
 
-module.exports = new UserService()
+export default new UserService()

@@ -1,14 +1,17 @@
-const prisma = require('../../config/database')
-const { paginate } = require('../../utils/paginator')
+import { Request } from 'express'
+import prisma from '../../config/database'
+import { Prisma, User } from '@prisma/client'
+import { paginate } from '../../utils/paginator'
+import { UserProfileResponse } from '../../types/user'
 
 // UserRepository handles all database operations related to the User model
 class UserRepository {
-  async paginate(req) {
+  async paginate(req: Request): Promise<any> {
     return await paginate(
       prisma.user,
       {
         where: { deletedAt: null },
-        whereNot: { id: req.user.sub },
+        whereNot: { id: req.user?.sub },
         select: {
           id: true,
           name: true,
@@ -45,7 +48,10 @@ class UserRepository {
     )
   }
 
-  async find(slug, txOrPrisma = null) {
+  async find(
+    slug: string,
+    txOrPrisma: any = null,
+  ): Promise<UserProfileResponse | null> {
     const db = txOrPrisma || prisma
     return await db.user.findFirst({
       where: { slug, deletedAt: null },
@@ -61,7 +67,10 @@ class UserRepository {
     })
   }
 
-  async findByEmail(email, txOrPrisma = null) {
+  async findByEmail(
+    email: string,
+    txOrPrisma: any = null,
+  ): Promise<User | null> {
     const db = txOrPrisma || prisma
     return await db.user.findFirst({
       where: {
@@ -71,7 +80,11 @@ class UserRepository {
     })
   }
 
-  async findBySlugExcluding(slug, excludeId = null, txOrPrisma = null) {
+  async findBySlugExcluding(
+    slug: string,
+    excludeId: string | number | null = null,
+    txOrPrisma: any = null,
+  ): Promise<User | null> {
     const db = txOrPrisma || prisma
     return await db.user.findFirst({
       where: {
@@ -82,14 +95,21 @@ class UserRepository {
     })
   }
 
-  async create(data, txOrPrisma = null) {
+  async create(
+    data: Prisma.UserUncheckedCreateInput,
+    txOrPrisma: any = null,
+  ): Promise<User> {
     const db = txOrPrisma || prisma
     return await db.user.create({
       data,
     })
   }
 
-  async update(id, data, txOrPrisma = null) {
+  async update(
+    id: number,
+    data: Prisma.UserUpdateInput,
+    txOrPrisma: any = null,
+  ): Promise<User> {
     const db = txOrPrisma || prisma
     return await db.user.update({
       where: { id },
@@ -97,7 +117,7 @@ class UserRepository {
     })
   }
 
-  async delete(id, txOrPrisma = null) {
+  async delete(id: number, txOrPrisma: any = null): Promise<void> {
     const db = txOrPrisma || prisma
     await db.user.delete({
       where: { id },
@@ -105,4 +125,4 @@ class UserRepository {
   }
 }
 
-module.exports = new UserRepository()
+export default new UserRepository()

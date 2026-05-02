@@ -1,24 +1,6 @@
 import { Prisma, User } from '@prisma/client'
 import prisma from '../../config/database'
-
-// Custom type for profile response with avatarUrl, etc.
-// You can adjust this based on your actual response structure
-export type UserProfileResponse = Prisma.UserGetPayload<{
-  select: {
-    id: true
-    name: true
-    email: true
-    avatar: true
-    role: {
-      select: {
-        title: true
-        access: true
-      }
-    }
-  }
-}> & {
-  avatarUrl?: string
-}
+import { UserProfileResponse } from '../../types/user'
 
 class ProfileRepository {
   async getProfile(

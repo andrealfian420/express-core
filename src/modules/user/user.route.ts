@@ -1,12 +1,13 @@
-const express = require('express')
-const userController = require('./user.controller')
-const { createUserSchema, updateUserSchema } = require('./user.validation')
-const validate = require('../../middleware/validate.middleware')
-const authMiddleware = require('../../middleware/auth.middleware')
-const checkPermission = require('../../middleware/rbac.middleware')
-const { PERMISSIONS } = require('../role/role.permissions')
-const { createUploader } = require('../../middleware/upload.middleware')
-const router = express.Router()
+import { Router } from 'express'
+import userController from './user.controller'
+import { createUserSchema, updateUserSchema } from './user.validation'
+import validate from '../../middleware/validate.middleware'
+import authMiddleware from '../../middleware/auth.middleware'
+import checkPermission from '../../middleware/rbac.middleware'
+import { PERMISSIONS } from '../role/role.permissions'
+import { createUploader } from '../../middleware/upload.middleware'
+
+const router = Router()
 
 const avatarUploader = createUploader(
   'avatars',
@@ -54,4 +55,4 @@ router.delete(
   userController.delete,
 )
 
-module.exports = router
+export default router

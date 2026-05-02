@@ -1,5 +1,5 @@
 import AppError from '../../utils/appError'
-import profileRepository, { UserProfileResponse } from './profile.repository'
+import profileRepository from './profile.repository'
 import storageService from '../../services/storage.service'
 import cacheService from '../../services/cache.service'
 import systemService from '../../services/system.service'
@@ -8,6 +8,7 @@ import userRepository from '../user/user.repository'
 import { makeUniqueSlug } from '../../utils/sluggable'
 import bcrypt from 'bcryptjs'
 import authRepository from '../auth/auth.repository'
+import { UserProfileResponse } from '../../types/user'
 
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 10)
 
