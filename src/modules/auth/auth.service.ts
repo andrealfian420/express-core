@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs'
 import authRepository from './auth.repository'
-import { generateToken } from '../../utils/token'
+import { generateToken, hashToken } from '../../utils/token'
 import { Prisma } from '@prisma/client'
 import prisma from '../../config/database'
 import AppError from '../../utils/appError'
@@ -114,7 +114,7 @@ class AuthService {
     logger.info(`User ${user.email} logged in`)
 
     await authRepository.createRefreshToken({
-      token: refreshToken,
+      token: hashToken(refreshToken),
       userId: user.id,
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRES_DAYS * 86400000),
     })
@@ -129,23 +129,24 @@ class AuthService {
 
     // Use transaction to ensure token rotation is atomic (delete old token and create new one)
     return await prisma.$transaction(async (tx: PrismaTx) => {
-      const record = await authRepository.findRefreshToken(token, tx)
+      const hashedToken = hashToken(token)
+      const record = await authRepository.findRefreshToken(hashedToken, tx)
 
       if (!record) {
         throw new AppError('Invalid refresh token', 401)
       }
 
       if (record.expiresAt < new Date()) {
-        await authRepository.deleteRefreshToken(token, tx)
+        await authRepository.deleteRefreshToken(hashedToken, tx)
         throw new AppError('Refresh token expired', 401)
       }
 
       // Rotate refresh token: delete old one and create a new one
       const newRefreshToken = generateToken()
-      await authRepository.deleteRefreshToken(token, tx)
+      await authRepository.deleteRefreshToken(hashedToken, tx)
       await authRepository.createRefreshToken(
         {
-          token: newRefreshToken,
+          token: hashToken(newRefreshToken),
           userId: record.userId,
           expiresAt: new Date(
             Date.now() + REFRESH_TOKEN_EXPIRES_DAYS * 86400000,
@@ -162,14 +163,15 @@ class AuthService {
   }
 
   async logout(token: string): Promise<void> {
-    const record = await authRepository.findRefreshToken(token)
+    const hashedToken = hashToken(token)
+    const record = await authRepository.findRefreshToken(hashedToken)
 
     if (!record) {
       throw new AppError('Invalid refresh token', 401)
     }
 
     await cacheService.del(`profile:${record.userId}`) // Invalidate cached profile on logout
-    await authRepository.deleteRefreshToken(token)
+    await authRepository.deleteRefreshToken(hashedToken)
   }
 
   async verifyEmail(token: string): Promise<void> {
