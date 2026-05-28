@@ -59,7 +59,7 @@ const apiRateLimiter = createRateLimiter({
 // auth rate limiter with stricter options, can be used for authentication routes to prevent brute-force attacks
 const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // limit each IP to 50 requests per windowMs
+  max: process.env.NODE_ENV === 'production' ? 50 : 1000, // limit each IP to 50 requests per windowMs
 })
 
 // Specific rate limiters for individual auth endpoints
@@ -67,25 +67,25 @@ const authRateLimiter = createRateLimiter({
 // Login: strict limit to prevent brute-force attacks
 const loginRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // limit each IP to 10 login attempts per windowMs
+  max: process.env.NODE_ENV === 'production' ? 10 : 1000, // limit each IP to 10 login attempts per windowMs
 })
 
 // Register: moderate limit to prevent spam registrations
 const registerRateLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 20, // limit each IP to 20 registrations per windowMs
+  max: process.env.NODE_ENV === 'production' ? 20 : 1000, // limit each IP to 20 registrations per windowMs
 })
 
 // Request password reset: very strict to prevent email flooding
 const requestPasswordResetRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 reset requests per windowMs
+  max: process.env.NODE_ENV === 'production' ? 5 : 1000, // limit each IP to 5 reset requests per windowMs
 })
 
 // Reset password: strict to prevent token brute-forcing
 const resetPasswordRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // limit each IP to 10 reset attempts per windowMs
+  max: process.env.NODE_ENV === 'production' ? 10 : 1000, // limit each IP to 10 reset attempts per windowMs
 })
 
 export {
