@@ -1,7 +1,7 @@
 const { PrismaClient } = require('@prisma/client')
 const bcrypt = require('bcryptjs')
-const { ALL_PERMISSIONS } = require('../src/modules/role/role.permissions')
-const { makeUniqueSlug } = require('../src/utils/sluggable')
+const { ALL_PERMISSIONS } = require('../dist/modules/role/role.permissions')
+const { makeUniqueSlug } = require('../dist/utils/sluggable')
 const db = new PrismaClient()
 
 async function main() {
