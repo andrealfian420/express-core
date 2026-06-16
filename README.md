@@ -200,14 +200,74 @@ Response includes a `meta` object (total, per_page, current_page, last_page, fro
 Make sure the following are installed on your system:
 
 - [Node.js](https://nodejs.org/) >= 18
-- [PostgreSQL](https://www.postgresql.org/) >= 14
-- [Redis](https://redis.io/) >= 6
+- [PostgreSQL](https://www.postgresql.org/) >= 14 (or use Docker)
+- [Redis](https://redis.io/) >= 6 (or use Docker)
+- [Docker](https://www.docker.com/) & Docker Compose (optional, for containerized setup)
 
 ---
 
 ## Installation
 
-### 1. Clone & install dependencies
+### Option A: Docker (Recommended for teams)
+
+Full containerized development with hot-reload — no need to install Node, PostgreSQL, or Redis on your host machine.
+
+#### 1. Clone the repository
+
+```bash
+git clone <repository-url>
+cd express-core
+```
+
+#### 2. Configure environment
+
+```bash
+cp .env.docker.example .env.docker
+```
+
+Edit `.env.docker` and fill in your values (JWT secret, SMTP credentials, etc.).
+
+#### 3. Start development environment
+
+```bash
+make dev
+```
+
+This will:
+
+- Build the Docker images
+- Start PostgreSQL (PostGIS) + Redis containers
+- Run Prisma migrations automatically
+- Start the API server and BullMQ worker with hot-reload (`ts-node-dev`)
+
+The API will be available at `http://localhost:3000`.
+
+#### 4. Run database seed
+
+```bash
+make seed
+```
+
+#### Available Make commands
+
+| Command        | Description                                      |
+| -------------- | ------------------------------------------------ |
+| `make dev`     | Start full Docker dev environment (hot-reload)   |
+| `make prod`    | Start production-like environment                |
+| `make build`   | Build Docker images only                         |
+| `make migrate` | Run Prisma migrations (dev mode)                 |
+| `make seed`    | Run database seeder                              |
+| `make logs`    | Tail all container logs                          |
+| `make shell`   | Shell into the API container                     |
+| `make studio`  | Open Prisma Studio                               |
+| `make down`    | Stop all containers                              |
+| `make clean`   | Stop containers and remove volumes (fresh start) |
+
+---
+
+### Option B: Manual (Native)
+
+#### 1. Clone & install dependencies
 
 ```bash
 git clone <repository-url>
@@ -215,7 +275,7 @@ cd express-core
 npm install
 ```
 
-### 2. Configure environment
+#### 2. Configure environment
 
 Copy `.env.example` to `.env`:
 
@@ -261,7 +321,7 @@ REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
 ```
 
-### 3. Create storage directories
+#### 3. Create storage directories
 
 ```bash
 mkdir -p client/storage/logs client/storage/public/uploads
@@ -373,6 +433,14 @@ npx prisma db seed
 
 ### Development
 
+**With Docker (recommended):**
+
+```bash
+make dev
+```
+
+**Without Docker (native):**
+
 Runs the API server and BullMQ worker in parallel with auto-reload:
 
 ```bash
@@ -389,6 +457,16 @@ Output goes to `dist/`.
 
 ### Production
 
+**With Docker:**
+
+```bash
+make prod
+```
+
+This starts the API and worker as separate containers with resource limits, healthchecks, and automatic restarts.
+
+**With PM2 (without Docker):**
+
 Both the API server and BullMQ worker must run as **separate processes**. Use the included PM2 config:
 
 ```bash
@@ -402,6 +480,45 @@ pm2 reload ecosystem.config.js --env production
 ```
 
 > The API (`dist/server.js`) runs in **cluster** mode across all CPU cores. The worker (`dist/jobs/run-workers.js`) runs in **fork** mode with BullMQ internal concurrency of 5.
+
+---
+
+## Docker Architecture
+
+The Docker setup uses a **multi-stage Dockerfile** for optimized production builds and **Docker Compose** for service orchestration.
+
+### Services
+
+| Service    | Image                    | Purpose                          | Port (host-bound) |
+| ---------- | ------------------------ | -------------------------------- | ----------------- |
+| `postgres` | `postgis/postgis:18-3.6` | PostgreSQL + PostGIS             | `127.0.0.1:5432`  |
+| `redis`    | `redis:latest`           | Cache, queue broker, rate limits | `127.0.0.1:6379`  |
+| `api`      | Built from `Dockerfile`  | Express API server               | `127.0.0.1:3000`  |
+| `worker`   | Built from `Dockerfile`  | BullMQ background workers        | —                 |
+| `migrate`  | Built from `Dockerfile`  | Prisma migrate (runs once)       | —                 |
+
+### Resource Limits
+
+| Service    | CPU Limit | Memory Limit |
+| ---------- | --------- | ------------ |
+| `postgres` | 1.0       | 512 MB       |
+| `redis`    | 0.5       | 256 MB       |
+| `api`      | 1.0       | 512 MB       |
+| `worker`   | 0.5       | 256 MB       |
+
+### Volumes
+
+| Volume       | Mounted At                           | Purpose           |
+| ------------ | ------------------------------------ | ----------------- |
+| `posgredata` | `/var/lib/postgresql/data`           | PostgreSQL data   |
+| `redisdata`  | `/data`                              | Redis persistence |
+| bind mount   | `/app/client/storage/public/uploads` | Uploaded files    |
+
+### Healthchecks
+
+- **PostgreSQL**: `pg_isready` every 10s
+- **Redis**: `redis-cli ping` every 10s
+- **API**: `GET /api/v1/health` every 30s (start period: 15s)
 
 ---
 

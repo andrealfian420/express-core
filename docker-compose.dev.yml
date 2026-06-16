@@ -1,0 +1,28 @@
+services:
+  api:
+    build:
+      context: .
+      target: deps
+    command: npx ts-node-dev --respawn --transpile-only src/server.ts
+    volumes:
+      - ./src:/app/src
+      - ./prisma:/app/prisma
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./client/storage/public/uploads:/app/client/storage/public/uploads
+    environment:
+      NODE_ENV: development
+
+  worker:
+    build:
+      context: .
+      target: deps
+    command: npx ts-node-dev --respawn --transpile-only src/jobs/run-workers.ts
+    volumes:
+      - ./src:/app/src
+      - ./prisma:/app/prisma
+      - ./tsconfig.json:/app/tsconfig.json
+    environment:
+      NODE_ENV: development
+
+  migrate:
+    command: npx prisma migrate dev

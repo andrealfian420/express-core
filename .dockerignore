@@ -1,0 +1,31 @@
+node_modules
+dist
+.env
+.env.*
+!.env.docker
+
+# Logs
+client/storage/logs
+*.log
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose*.yml
+
+# Dev tools
+.eslintcache
+coverage
