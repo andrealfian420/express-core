@@ -227,6 +227,18 @@ cp .env.docker.example .env.docker
 
 Edit `.env.docker` and fill in your values (JWT secret, SMTP credentials, etc.).
 
+Then create `.env` for Docker Compose variable substitution:
+
+```bash
+cat > .env << 'EOF'
+PORT=3001
+DB_USER=postgres
+DB_PASSWORD=root
+DB_NAME=db_express
+REDIS_PASSWORD=secret
+EOF
+```
+
 #### 3. Start development environment
 
 ```bash
@@ -236,11 +248,13 @@ make dev
 This will:
 
 - Build the Docker images
-- Start PostgreSQL (PostGIS) + Redis containers
+- Start PostgreSQL (PostGIS) + Redis containers (with authentication)
 - Run Prisma migrations automatically
-- Start the API server and BullMQ worker with hot-reload (`ts-node-dev`)
+- Start the API server and BullMQ worker with hot-reload (`ts-node-dev --poll`)
 
-The API will be available at `http://localhost:3000`.
+The API will be available at `http://localhost:3001` (or whatever `PORT` is set to in `.env`).
+
+> **Note:** `--poll` is required for hot-reload to work when the project is on a Windows filesystem. See [DOCKER_IMPLEMENTATION.md](DOCKER_IMPLEMENTATION.md) for details.
 
 #### 4. Run database seed
 
@@ -487,15 +501,17 @@ pm2 reload ecosystem.config.js --env production
 
 The Docker setup uses a **multi-stage Dockerfile** for optimized production builds and **Docker Compose** for service orchestration.
 
+For full implementation details, see [DOCKER_IMPLEMENTATION.md](DOCKER_IMPLEMENTATION.md).
+
 ### Services
 
-| Service    | Image                    | Purpose                          | Port (host-bound) |
-| ---------- | ------------------------ | -------------------------------- | ----------------- |
-| `postgres` | `postgis/postgis:18-3.6` | PostgreSQL + PostGIS             | `127.0.0.1:5432`  |
-| `redis`    | `redis:latest`           | Cache, queue broker, rate limits | `127.0.0.1:6379`  |
-| `api`      | Built from `Dockerfile`  | Express API server               | `127.0.0.1:3000`  |
-| `worker`   | Built from `Dockerfile`  | BullMQ background workers        | —                 |
-| `migrate`  | Built from `Dockerfile`  | Prisma migrate (runs once)       | —                 |
+| Service    | Image                    | Purpose                          | Port (host-bound)   |
+| ---------- | ------------------------ | -------------------------------- | ------------------- |
+| `postgres` | `postgis/postgis:18-3.6` | PostgreSQL + PostGIS             | `127.0.0.1:5433`    |
+| `redis`    | `redis:8.8.0`            | Cache, queue broker, rate limits | `127.0.0.1:6379`    |
+| `api`      | Built from `Dockerfile`  | Express API server               | `127.0.0.1:${PORT}` |
+| `worker`   | Built from `Dockerfile`  | BullMQ background workers        | —                   |
+| `migrate`  | Built from `Dockerfile`  | Prisma migrate (runs once)       | —                   |
 
 ### Resource Limits
 
@@ -503,22 +519,31 @@ The Docker setup uses a **multi-stage Dockerfile** for optimized production buil
 | ---------- | --------- | ------------ |
 | `postgres` | 1.0       | 512 MB       |
 | `redis`    | 0.5       | 256 MB       |
-| `api`      | 1.0       | 512 MB       |
+| `api`      | 1.0       | 1 GB         |
 | `worker`   | 0.5       | 256 MB       |
 
 ### Volumes
 
-| Volume       | Mounted At                           | Purpose           |
-| ------------ | ------------------------------------ | ----------------- |
-| `posgredata` | `/var/lib/postgresql/data`           | PostgreSQL data   |
-| `redisdata`  | `/data`                              | Redis persistence |
-| bind mount   | `/app/client/storage/public/uploads` | Uploaded files    |
+| Volume                   | Mounted At                           | Purpose           |
+| ------------------------ | ------------------------------------ | ----------------- |
+| `express-core-pgdata`    | `/var/lib/postgresql`                | PostgreSQL data   |
+| `express-core-redisdata` | `/data`                              | Redis persistence |
+| bind mount               | `/app/client/storage/public/uploads` | Uploaded files    |
 
 ### Healthchecks
 
 - **PostgreSQL**: `pg_isready` every 10s
-- **Redis**: `redis-cli ping` every 10s
-- **API**: `GET /api/v1/health` every 30s (start period: 15s)
+- **Redis**: `redis-cli ping` (with auth) every 10s
+- **API**: `GET /api/v1/health/ready` every 30s (start period: 15s) — returns 503 if DB or Redis is down
+
+### Environment Files
+
+| File          | Read By                       | Purpose                                               |
+| ------------- | ----------------------------- | ----------------------------------------------------- |
+| `.env`        | Docker Compose (YAML parsing) | Variable substitution for `${}` in docker-compose.yml |
+| `.env.docker` | Containers (via `env_file:`)  | App environment (`process.env.*`) inside containers   |
+
+> Variables used in both places (`PORT`, `REDIS_PASSWORD`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`) must have identical values in both files.
 
 ---
 
@@ -582,9 +607,10 @@ Base URL: `http://localhost:3000/api/v1`
 
 ### Health
 
-| Method | Endpoint  | Description         |
-| ------ | --------- | ------------------- |
-| GET    | `/health` | Check server status |
+| Method | Endpoint        | Description                                       |
+| ------ | --------------- | ------------------------------------------------- |
+| GET    | `/health`       | Check server status (always 200)                  |
+| GET    | `/health/ready` | Readiness check — returns 503 if DB/Redis is down |
 
 ---
 
