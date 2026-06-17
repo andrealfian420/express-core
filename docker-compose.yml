@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-root}
       POSTGRES_DB: ${DB_NAME:-db_express}
     ports:
-      - '127.0.0.1:5432:5432'
+      - '127.0.0.1:5433:5432'
     volumes:
       - postgredata:/var/lib/postgresql
     healthcheck:
@@ -24,9 +24,11 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
+    networks:
+      - express-core-network
 
   redis:
-    image: redis:latest
+    image: redis:8.8.0
     container_name: redis
     restart: unless-stopped
     ports:
@@ -46,7 +48,8 @@ services:
         reservations:
           cpus: '0.1'
           memory: 64M
-
+    networks:
+      - express-core-network
   migrate:
     build:
       context: .
@@ -65,6 +68,8 @@ services:
         limits:
           cpus: '0.5'
           memory: 256M
+    networks:
+      - express-core-network
 
   api:
     build:
@@ -107,6 +112,8 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
+    networks:
+      - express-core-network
 
   worker:
     build:
@@ -132,6 +139,12 @@ services:
         reservations:
           cpus: '0.1'
           memory: 64M
+    networks:
+      - express-core-network
+
+networks:
+  express-core-network:
+    name: express-core-network
 
 volumes:
   postgredata:
