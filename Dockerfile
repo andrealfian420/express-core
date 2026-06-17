@@ -52,6 +52,6 @@ RUN groupadd -g 1001 appgroup && \
 RUN chown -R appuser:appgroup /app
 USER appuser
 
-EXPOSE 3000
+EXPOSE 3001
 
 CMD ["node", "dist/server.js"]
