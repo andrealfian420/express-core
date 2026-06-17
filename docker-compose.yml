@@ -55,7 +55,7 @@ services:
     build:
       context: .
       target: deps
-    container_name: express-migrate
+    container_name: express-core-migrate
     working_dir: /app
     command: npx prisma migrate deploy
     env_file:
