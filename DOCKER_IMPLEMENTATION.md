@@ -31,7 +31,7 @@ express-core-worker     →  your-project-worker
 express-core-network    →  your-project-network
 express-core-pgdata     →  your-project-pgdata
 express-core-redisdata  →  your-project-redisdata
-express-migrate         →  your-project-migrate
+express-core-migrate    →  your-project-migrate
 ```
 
 > **Why:** Docker volumes and container names are global. If two projects share the same names, their data will collide.
