@@ -1,5 +1,5 @@
 # ---- Stage 1: Dependencies ----
-FROM node:20-slim AS deps
+FROM node:24-slim AS deps
 
 RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
@@ -11,7 +11,7 @@ COPY prisma ./prisma/
 RUN npm ci
 
 # ---- Stage 2: Build ----
-FROM node:20-slim AS build
+FROM node:24-slim AS build
 
 RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
@@ -26,7 +26,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # ---- Stage 3: Production ----
-FROM node:20-slim AS production
+FROM node:24-slim AS production
 
 RUN apt-get update && apt-get install -y openssl wget && rm -rf /var/lib/apt/lists/*
 
