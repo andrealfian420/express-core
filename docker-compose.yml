@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgis/postgis:18-3.6
-    container_name: postgre18
+    container_name: express-core-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -10,7 +10,7 @@ services:
     ports:
       - '127.0.0.1:5433:5432'
     volumes:
-      - postgredata:/var/lib/postgresql
+      - express-core-pgdata:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-postgres}']
       interval: 10s
@@ -29,12 +29,12 @@ services:
 
   redis:
     image: redis:8.8.0
-    container_name: redis
+    container_name: express-core-redis
     restart: unless-stopped
     ports:
       - '127.0.0.1:6379:6379'
     volumes:
-      - redisdata:/data
+      - express-core-redisdata:/data
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -147,7 +147,7 @@ networks:
     name: express-core-network
 
 volumes:
-  postgredata:
-    name: postgredata
-  redisdata:
-    name: redisdata
+  express-core-pgdata:
+    name: express-core-pgdata
+  express-core-redisdata:
+    name: express-core-redisdata
