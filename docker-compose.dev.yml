@@ -3,7 +3,7 @@ services:
     build:
       context: .
       target: deps
-    command: npx ts-node-dev --respawn --transpile-only src/server.ts
+    command: npx ts-node-dev --respawn --transpile-only --poll src/server.ts
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma
@@ -16,7 +16,7 @@ services:
     build:
       context: .
       target: deps
-    command: npx ts-node-dev --respawn --transpile-only src/jobs/run-workers.ts
+    command: npx ts-node-dev --respawn --transpile-only --poll src/jobs/run-workers.ts
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma
