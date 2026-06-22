@@ -12,6 +12,9 @@ import helperRoutes from '../modules/helper/helper.route'
 
 const router = Router()
 
+// Health routes — placed BEFORE rate limiter (used by Docker healthcheck)
+router.use('/health', healthRoutes)
+
 // Place auth routes before general API rate limiter to allow for more specific rate limits on auth endpoints
 router.use('/auth', authRoutes)
 
@@ -21,7 +24,6 @@ router.use(apiRateLimiter)
 // Mounting Routes
 router.use('/users', userRoutes)
 router.use('/profile', profileRoutes)
-router.use('/health', healthRoutes)
 router.use('/roles', roleRoutes)
 router.use('/activity-logs', activityLogRoutes)
 router.use('/utils', helperRoutes)
