@@ -1,0 +1,72 @@
+# Bitbucket Pipelines: Build, Push to Bitbucket Packages, Deploy to VPS
+#
+# Setup:
+#   1. Copy to bitbucket-pipelines.yml (remove .example)
+#   2. Add these repository variables in Settings → Pipelines → Repository variables:
+#      - VPS_HOST: your VPS IP or hostname
+#      - VPS_USER: SSH username (must be in docker group)
+#      - VPS_SSH_KEY: base64-encoded private SSH key (Secured)
+#      - VPS_PORT: SSH port (default 22)
+#   3. Update the image name below to match your workspace/repo
+#   4. Enable Pipelines in repository settings
+#   5. Ensure VPS has docker compose + the project's compose files + .env
+#
+# Notes:
+#   - Bitbucket Packages authentication is automatic within pipelines
+#   - On VPS, authenticate with: docker login docker.pkg.bitbucket.org -u USERNAME -p APP_PASSWORD
+#   - Image URL format: docker.pkg.bitbucket.org/WORKSPACE/REPO/IMAGE_NAME:TAG
+
+image: node:24-slim
+
+definitions:
+  services:
+    docker:
+      memory: 2048
+
+pipelines:
+  branches:
+    main:
+      - step:
+          name: Build & Push Image
+          services:
+            - docker
+          caches:
+            - docker
+          script:
+            - export IMAGE_NAME="docker.pkg.bitbucket.org/$BITBUCKET_WORKSPACE/$BITBUCKET_REPO_SLUG/app"
+            - export IMAGE_TAG="${BITBUCKET_COMMIT:0:7}"
+
+            # Build production image
+            - docker build --target production -t $IMAGE_NAME:$IMAGE_TAG -t $IMAGE_NAME:latest .
+
+            # Push to Bitbucket Packages (auto-authenticated)
+            - docker push $IMAGE_NAME:$IMAGE_TAG
+            - docker push $IMAGE_NAME:latest
+
+      - step:
+          name: Deploy to VPS
+          deployment: production
+          script:
+            - pipe: atlassian/ssh-run:0.8.1
+              variables:
+                SSH_USER: $VPS_USER
+                SERVER: $VPS_HOST
+                PORT: $VPS_PORT
+                SSH_KEY: $VPS_SSH_KEY
+                COMMAND: >
+                  cd /opt/your-project &&
+                  set -a && source .env && set +a &&
+                  docker compose -f docker-compose.yml -f docker-compose.prod.yml pull &&
+                  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d &&
+                  echo "Waiting for health check on port ${PORT:-3001}..." &&
+                  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+                    if curl -sf http://localhost:${PORT:-3001}/api/v1/health/ready > /dev/null 2>&1; then
+                      echo "Health check passed";
+                      exit 0;
+                    fi;
+                    echo "  Attempt $i/12 - waiting 5s...";
+                    sleep 5;
+                  done;
+                  echo "Health check failed after 60s";
+                  docker compose -f docker-compose.yml -f docker-compose.prod.yml logs api --tail 20;
+                  exit 1

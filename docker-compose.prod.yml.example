@@ -1,0 +1,30 @@
+# Production Override — Uses pre-built images from a container registry
+# instead of building locally. Used with CI/CD (Option A deployment).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Setup:
+#   1. Copy this file: cp docker-compose.prod.yml.example docker-compose.prod.yml
+#   2. Replace the image URLs with your actual registry paths
+#   3. Authenticate with your registry:
+#      - GHCR:     echo $GHCR_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+#      - Bitbucket: docker login docker.pkg.bitbucket.org -u USERNAME -p APP_PASSWORD
+
+services:
+  api:
+    # Replace with your registry image URL
+    image: ghcr.io/your-org/your-project:latest
+    # image: docker.pkg.bitbucket.org/your-workspace/your-repo/your-project:latest
+    build: !reset null
+
+  worker:
+    image: ghcr.io/your-org/your-project:latest
+    # image: docker.pkg.bitbucket.org/your-workspace/your-repo/your-project:latest
+    build: !reset null
+
+  migrate:
+    image: ghcr.io/your-org/your-project:latest
+    # image: docker.pkg.bitbucket.org/your-workspace/your-repo/your-project:latest
+    build: !reset null

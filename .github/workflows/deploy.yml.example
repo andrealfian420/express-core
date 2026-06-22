@@ -1,0 +1,102 @@
+# GitHub Actions: Build, Push to GHCR, Deploy to VPS
+#
+# Setup:
+#   1. Copy to .github/workflows/deploy.yml (remove .example)
+#   2. Add these secrets in repo Settings → Secrets → Actions:
+#      - VPS_HOST: your VPS IP or hostname
+#      - VPS_USER: SSH username (must be in docker group)
+#      - VPS_SSH_KEY: private SSH key (ed25519 recommended)
+#      - VPS_PORT: SSH port (default 22)
+#   3. Update env vars below (IMAGE_NAME, DEPLOY_PATH)
+#   4. Ensure VPS has docker compose + the project's compose files + .env
+
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }} # e.g., your-org/your-project
+  DEPLOY_PATH: /opt/your-project # path on VPS where compose files live
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            cd ${{ env.DEPLOY_PATH }}
+
+            # Load environment variables (for PORT)
+            set -a && source .env && set +a
+
+            # Pull latest images
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+
+            # Restart services
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+            # Wait for health check (max 60s)
+            echo "Waiting for health check on port ${PORT:-3001}..."
+            for i in $(seq 1 12); do
+              if curl -sf http://localhost:${PORT:-3001}/api/v1/health/ready > /dev/null 2>&1; then
+                echo "Health check passed"
+                exit 0
+              fi
+              echo "  Attempt $i/12 - waiting 5s..."
+              sleep 5
+            done
+
+            echo "Health check failed after 60s"
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml logs api --tail 20
+            exit 1

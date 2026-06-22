@@ -537,6 +537,29 @@ Template: `.env.example`
 
 ---
 
+## Deployment (VPS)
+
+For production deployment on a VPS (Ubuntu 24.04 + Nginx + Let's Encrypt), see the full guide in [DOCKER_IMPLEMENTATION.md → VPS Deployment](DOCKER_IMPLEMENTATION.md#vps-deployment).
+
+### Quick Reference
+
+Two deployment options are supported:
+
+| Option               | How it works                                                               | Best for                 |
+| -------------------- | -------------------------------------------------------------------------- | ------------------------ |
+| **A: Registry pull** | CI builds image → pushes to GHCR/Bitbucket Packages → VPS pulls + restarts | Teams, CI/CD pipelines   |
+| **B: Build on VPS**  | VPS does `git pull` → `docker compose up --build -d`                       | Solo devs, simple setups |
+
+### Example CI/CD configs (in repo root)
+
+- `.github/workflows/deploy.yml.example` — GitHub Actions + GHCR
+- `bitbucket-pipelines.yml.example` — Bitbucket Pipelines + Bitbucket Packages
+- `docker-compose.prod.yml.example` — Production override (uses registry images)
+
+> Copy and rename without `.example` to activate. Configure secrets per the [CI/CD setup guide](DOCKER_IMPLEMENTATION.md#step-6-cicd-secrets-configuration).
+
+---
+
 ## API Endpoints
 
 Base URL: `http://localhost:3001/api/v1`

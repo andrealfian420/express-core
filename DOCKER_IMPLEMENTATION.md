@@ -975,3 +975,307 @@ For multi-node production, migrate to object storage (S3, GCS, MinIO).
 | `Cannot find module '../dist/...'` during seed  | `dist/` doesn't exist in dev mode | Run `npx tsc` before `prisma db seed` (handled by `make seed`)                 |
 | Health endpoint returns 429                     | Health route behind rate limiter  | Move `router.use('/health', healthRoutes)` before `router.use(apiRateLimiter)` |
 | App can't connect to Redis/Postgres             | Wrong host in `.env`              | Use `redis` / `postgres` (service names) for Docker, `127.0.0.1` for local     |
+
+---
+
+## VPS Deployment
+
+Step-by-step guide to deploy this project on a VPS (Ubuntu 24.04) with Nginx reverse proxy and SSL.
+
+### Prerequisites (assumed already done)
+
+- Ubuntu 24.04 LTS with SSH access
+- Docker + Docker Compose installed
+- Nginx installed
+- Certbot (Let's Encrypt) configured
+- Domain (e.g., `api.example.com`) pointing to VPS IP
+- Non-root user with `sudo` access and membership in the `docker` group
+
+---
+
+### Step 1: Server Preparation
+
+```bash
+# Create app directory
+sudo mkdir -p /opt/your-project
+sudo chown $USER:$USER /opt/your-project
+
+# Clone the repository (only need compose files + prisma for Option B)
+cd /opt/your-project
+git clone <repository-url> .
+
+# Create production .env
+cp .env.example .env
+```
+
+Edit `.env` with production values:
+
+```env
+APP_NAME="Your App"
+APP_URL="https://api.example.com"
+NODE_ENV=production
+PORT=3001
+
+ENABLECORS=true
+ENABLEHELMET=true
+FORMLIMIT=52428800
+ENABLELOG=true
+
+# Database — generate a strong password
+DATABASE_URL="postgresql://postgres:STRONG_PASSWORD_HERE@postgres:5432/your_db?schema=public"
+DB_USER=postgres
+DB_PASSWORD=STRONG_PASSWORD_HERE
+DB_NAME=your_db
+
+# JWT — generate with: node -e "console.log(require('crypto').randomBytes(512).toString('hex'))"
+JWT_ACCESS_SECRET=GENERATE_THIS
+JWT_ACCESS_EXPIRES=15m
+REFRESH_TOKEN_EXPIRES_DAYS=7
+EMAIL_VERIFICATION_EXPIRES_HOURS=24
+PASSWORD_RESET_EXPIRES_MINUTES=30
+BCRYPT_ROUNDS=12
+
+# SMTP
+SMTP_HOST=smtp.your-provider.com
+SMTP_PORT=587
+SMTP_USER="your_user"
+SMTP_PASS="your_password"
+SMTP_FROM="Your App <noreply@example.com>"
+
+# Redis — generate with: node -e "console.log(require('crypto').randomBytes(128).toString('hex'))"
+REDIS_HOST=redis
+REDIS_PORT=6379
+REDIS_PASSWORD=GENERATE_THIS
+
+# CORS — your frontend domain(s)
+ALLOWED_ORIGINS="https://example.com,https://www.example.com"
+```
+
+> **Important:** Generate real secrets. Never use the example defaults (`root`, `secret`) in production.
+
+---
+
+### Step 2: Nginx Configuration
+
+Create `/etc/nginx/sites-available/your-project`:
+
+```nginx
+server {
+    listen 80;
+    server_name api.example.com;
+
+    # Redirect HTTP to HTTPS
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.example.com;
+
+    # SSL (managed by Certbot)
+    ssl_certificate /etc/letsencrypt/live/api.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.example.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Gzip
+    gzip on;
+    gzip_types application/json text/plain application/javascript text/css;
+    gzip_min_length 1000;
+
+    # Client body size (for file uploads)
+    client_max_body_size 50M;
+
+    # Proxy to Docker container
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+
+        # Headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket support (if needed in future)
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+```
+
+Enable and test:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/your-project /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+
+# If you haven't run Certbot yet:
+sudo certbot --nginx -d api.example.com
+```
+
+---
+
+### Step 3: Deploy — Option A (CI/CD Registry Pull)
+
+**Recommended for teams.** CI builds the image and pushes to a container registry. VPS only pulls and restarts.
+
+#### Setup on VPS
+
+Create `docker-compose.prod.yml` (see `docker-compose.prod.yml.example` in repo):
+
+```yaml
+services:
+  api:
+    image: ghcr.io/your-org/your-project:latest # or Bitbucket registry URL
+    build: !reset null
+
+  worker:
+    image: ghcr.io/your-org/your-project:latest
+    build: !reset null
+
+  migrate:
+    image: ghcr.io/your-org/your-project:latest
+    build: !reset null
+```
+
+#### Deploy commands
+
+```bash
+# Pull latest images from registry
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+
+# Start/restart with zero-downtime
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# Verify
+curl -f http://localhost:3001/api/v1/health/ready
+```
+
+#### CI/CD pipeline
+
+See example pipeline configs in the repository:
+
+- `.github/workflows/deploy.yml.example` — GitHub Actions + GHCR
+- `bitbucket-pipelines.yml.example` — Bitbucket Pipelines + Bitbucket Packages
+
+Both follow the same flow:
+
+1. Build Docker image on push to `main`
+2. Tag with git SHA + `latest`
+3. Push to container registry
+4. SSH into VPS → pull → restart → health check
+
+---
+
+### Step 4: Deploy — Option B (Build on VPS)
+
+**Simpler setup, no registry needed.** Slower deploys since the VPS builds the image.
+
+```bash
+cd /opt/your-project
+
+# Pull latest code
+git pull origin main
+
+# Build and start
+docker compose up --build -d
+
+# First time only: run seed
+docker compose exec api sh -c "npx tsc && npx prisma db seed"
+
+# Verify
+curl -f http://localhost:3001/api/v1/health/ready
+```
+
+For CI/CD with this approach, the pipeline simply SSHs into the VPS and runs the commands above.
+
+---
+
+### Step 5: Firewall
+
+```bash
+# Allow only SSH, HTTP, HTTPS
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+
+# Verify Docker ports are NOT exposed externally
+# (they're bound to 127.0.0.1 in docker-compose.yml)
+sudo ufw status
+```
+
+> Docker ports (5433, 6379) are bound to `127.0.0.1` — they're only accessible from the VPS itself, not from the internet. No additional firewall rules needed for them.
+
+---
+
+### Step 6: CI/CD Secrets Configuration
+
+#### GitHub Actions
+
+Go to repository **Settings → Secrets and variables → Actions** and add:
+
+| Secret        | Value                                 |
+| ------------- | ------------------------------------- |
+| `VPS_HOST`    | Your VPS IP or hostname               |
+| `VPS_USER`    | SSH username (e.g., `deploy`)         |
+| `VPS_SSH_KEY` | Private SSH key (ed25519 recommended) |
+| `VPS_PORT`    | SSH port (default: `22`)              |
+
+For Option A (registry), also add:
+
+- `GHCR_TOKEN` — GitHub PAT with `write:packages` scope (or use `GITHUB_TOKEN` automatically)
+
+#### Bitbucket Pipelines
+
+Go to repository **Settings → Pipelines → Repository variables** and add:
+
+| Variable      | Value                          | Secured? |
+| ------------- | ------------------------------ | -------- |
+| `VPS_HOST`    | Your VPS IP or hostname        | No       |
+| `VPS_USER`    | SSH username                   | No       |
+| `VPS_SSH_KEY` | Base64-encoded private SSH key | Yes      |
+| `VPS_PORT`    | SSH port                       | No       |
+
+For Option A, Bitbucket Packages authentication is automatic within pipelines.
+
+#### SSH key setup on VPS
+
+```bash
+# On your local machine or CI: generate a deploy key
+ssh-keygen -t ed25519 -C "deploy-key" -f deploy_key -N ""
+
+# Copy the public key to the VPS
+ssh-copy-id -i deploy_key.pub user@your-vps-ip
+
+# Add the private key content as CI secret (VPS_SSH_KEY)
+cat deploy_key
+```
+
+---
+
+### Post-Deploy Checklist
+
+```
+[ ] Health endpoint returns 200: curl https://api.example.com/api/v1/health/ready
+[ ] SSL working: check https://api.example.com in browser
+[ ] CORS working: test from your frontend domain
+[ ] Database seeded: admin user exists
+[ ] Logs rotating: docker compose logs --tail 5 api
+[ ] Firewall active: sudo ufw status
+[ ] Secrets are strong: no default passwords in .env
+```
