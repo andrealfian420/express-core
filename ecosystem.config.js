@@ -11,7 +11,7 @@ module.exports = {
     },
     {
       name: 'worker',
-      script: 'dist/worker.js',
+      script: 'dist/jobs/run-workers.js',
       instances: 1, // Run a single instance of the worker
       exec_mode: 'fork', // Use fork mode for the worker
       env_production: {

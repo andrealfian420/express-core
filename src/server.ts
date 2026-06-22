@@ -14,8 +14,20 @@ const server = app.listen(PORT, () => {
 // Graceful shutdown
 // This function will be called when the process receives a termination signal (e.g., SIGINT, SIGTERM)
 // It will attempt to close the server and release resources like database connections before exiting
-async function gracefulShutdown() {
-  logger.info('Shutting down gracefully...')
+let isShuttingDown = false
+
+async function gracefulShutdown(signal?: string) {
+  if (isShuttingDown) return
+  isShuttingDown = true
+
+  logger.info(`Shutting down gracefully... ${signal ? `(${signal})` : ''}`)
+
+  // Force-kill fallback if graceful shutdown hangs
+  const forceExitTimeout = setTimeout(() => {
+    logger.error('Shutdown timed out, forcing exit')
+    process.exit(1)
+  }, 15_000)
+  forceExitTimeout.unref()
 
   server.close(async () => {
     try {
@@ -33,16 +45,15 @@ async function gracefulShutdown() {
 }
 
 // Listen for termination signals to trigger graceful shutdown
-process.on('SIGINT', gracefulShutdown)
-process.on('SIGTERM', gracefulShutdown)
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
 
 process.on('uncaughtException', (error: Error) => {
   logger.error('Uncaught Exception', { error })
-  process.exit(1)
+  gracefulShutdown('uncaughtException')
 })
 
 process.on('unhandledRejection', (reason: unknown, promise: Promise<any>) => {
   logger.error('Unhandled Rejection at:', { reason, promise })
-
-  process.exit(1)
+  gracefulShutdown('unhandledRejection')
 })

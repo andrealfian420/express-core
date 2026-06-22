@@ -3,12 +3,14 @@ services:
     build:
       context: .
       target: deps
+    read_only: false
     command: npx ts-node-dev --respawn --transpile-only --poll src/server.ts
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma
       - ./tsconfig.json:/app/tsconfig.json
       - ./client/storage/public/uploads:/app/client/storage/public/uploads
+      - ./client/storage:/app/client/storage
     environment:
       NODE_ENV: development
 
@@ -16,6 +18,7 @@ services:
     build:
       context: .
       target: deps
+    read_only: false
     command: npx ts-node-dev --respawn --transpile-only --poll src/jobs/run-workers.ts
     volumes:
       - ./src:/app/src

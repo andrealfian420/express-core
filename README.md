@@ -20,7 +20,7 @@ A production-ready, modular **Express.js v5 + TypeScript** REST API boilerplate.
 | Security        | Helmet, CORS, HPP, XSS sanitizer, Redis-backed Rate Limiter |
 | Logging         | Winston (daily rotating files) + Morgan (HTTP access/error) |
 | Scheduler       | node-cron                                                   |
-| Process Manager | PM2 (cluster mode for API, fork mode for workers)           |
+| Process Manager | PM2 or Docker Compose                                       |
 
 ---
 
@@ -222,22 +222,10 @@ cd express-core
 #### 2. Configure environment
 
 ```bash
-cp .env.docker.example .env.docker
+cp .env.example .env
 ```
 
-Edit `.env.docker` and fill in your values (JWT secret, SMTP credentials, etc.).
-
-Then create `.env` for Docker Compose variable substitution:
-
-```bash
-cat > .env << 'EOF'
-PORT=3001
-DB_USER=postgres
-DB_PASSWORD=root
-DB_NAME=db_express
-REDIS_PASSWORD=secret
-EOF
-```
+Edit `.env` and fill in your values (JWT secret, SMTP credentials, database credentials, etc.). This single file is used for both Docker Compose variable substitution and app configuration inside containers.
 
 #### 3. Start development environment
 
@@ -252,7 +240,7 @@ This will:
 - Run Prisma migrations automatically
 - Start the API server and BullMQ worker with hot-reload (`ts-node-dev --poll`)
 
-The API will be available at `http://localhost:3001` (or whatever `PORT` is set to in `.env`).
+The API will be available at `http://localhost:3001` (or whatever `PORT` is set to).
 
 > **Note:** `--poll` is required for hot-reload to work when the project is on a Windows filesystem. See [DOCKER_IMPLEMENTATION.md](DOCKER_IMPLEMENTATION.md) for details.
 
@@ -297,21 +285,21 @@ Copy `.env.example` to `.env`:
 cp .env.example .env
 ```
 
-Fill in the appropriate values:
+Fill in the appropriate values (adjust `REDIS_HOST` and `DATABASE_URL` for local development):
 
 ```env
 APP_NAME="App Name"
-APP_URL=http://localhost:
+APP_URL=http://localhost:3001
 NODE_ENV=development
-PORT=3000
+PORT=3001
 
 # Comma-separated list of allowed origins for CORS
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+ALLOWED_ORIGINS=http://localhost:3001,http://localhost:5173
 
 FORMLIMIT=52428800
 ENABLELOG=true
 
-# PostgreSQL
+# PostgreSQL (use localhost for local dev, not "postgres")
 DATABASE_URL="postgresql://user:password@localhost:5432/your_database?schema=public"
 
 # JWT — generate secrets with:
@@ -330,9 +318,10 @@ SMTP_USER="your_smtp_user"
 SMTP_PASS="your_smtp_password"
 SMTP_FROM="App Name <noreply@example.com>"
 
-# Redis
+# Redis (use 127.0.0.1 for local dev, not "redis")
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
+REDIS_PASSWORD=
 ```
 
 #### 3. Create storage directories
@@ -536,20 +525,21 @@ For full implementation details, see [DOCKER_IMPLEMENTATION.md](DOCKER_IMPLEMENT
 - **Redis**: `redis-cli ping` (with auth) every 10s
 - **API**: `GET /api/v1/health/ready` every 30s (start period: 15s) — returns 503 if DB or Redis is down
 
-### Environment Files
+### Environment File
 
-| File          | Read By                       | Purpose                                               |
-| ------------- | ----------------------------- | ----------------------------------------------------- |
-| `.env`        | Docker Compose (YAML parsing) | Variable substitution for `${}` in docker-compose.yml |
-| `.env.docker` | Containers (via `env_file:`)  | App environment (`process.env.*`) inside containers   |
+A single `.env` file is used for everything:
 
-> Variables used in both places (`PORT`, `REDIS_PASSWORD`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`) must have identical values in both files.
+- Docker Compose reads it for `${}` variable substitution in YAML
+- Containers receive it via `env_file:` (as `process.env.*`)
+- Local development reads it via `dotenv`
+
+Template: `.env.example`
 
 ---
 
 ## API Endpoints
 
-Base URL: `http://localhost:3000/api/v1`
+Base URL: `http://localhost:3001/api/v1`
 
 ### Auth
 
@@ -621,7 +611,7 @@ Uploaded files are stored at `client/storage/public/uploads/{folder}/` with a cr
 Files are served as static assets at:
 
 ```
-http://localhost:3000/storage/uploads/{folder}/{filename}
+http://localhost:3001/storage/uploads/{folder}/{filename}
 ```
 
 | Context        | Folder    | Allowed Types                           | Max Size |
