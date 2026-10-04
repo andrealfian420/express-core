@@ -1,59 +1,52 @@
+// Purpose: API process entrypoint — validates configuration, serves HTTP and releases every
+//   resource on shutdown.
+// Caller: `node dist/server.js` (PM2 cluster `api`, Docker `api` service), `npm run dev`.
+// Dependencies: config/env (imported first), app, Prisma, Redis, email/system queues, logger,
+//   utils/graceful-shutdown.
+// Main Functions: none exported; module start-up and the shutdown step list.
+// Side Effects: Opens the HTTP listener; on SIGINT/SIGTERM closes HTTP, queues, Prisma and
+//   Redis in order. Never schedules cron: the worker process owns all schedules.
+import './config/env' // MUST stay first: load .env and validate before any module reads config
 import app from './app'
-import startCronJobs from './jobs/cron'
+import { env } from './config/env'
 import prisma from './config/database'
-import redis from './config/redis'
+import { closeRedis } from './config/redis'
 import logger from './config/logger'
+import { emailQueue, systemQueue } from './jobs'
+import {
+  createShutdown,
+  installProcessHandlers,
+} from './utils/graceful-shutdown'
 
-startCronJobs()
-const PORT = process.env.PORT || 3001
+const server = app.listen(env.PORT, (error?: Error) => {
+  if (error) {
+    logger.error('HTTP server failed to start', { error: error.message })
+    shutdown('listen failure', true).then((code) => {
+      process.exitCode = code
+    })
+    return
+  }
 
-const server = app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`)
+  logger.info(`Server is running on port ${env.PORT}`)
 })
 
-// Graceful shutdown
-// This function will be called when the process receives a termination signal (e.g., SIGINT, SIGTERM)
-// It will attempt to close the server and release resources like database connections before exiting
-let isShuttingDown = false
+const closeServer = (): Promise<void> =>
+  new Promise((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  )
 
-async function gracefulShutdown(signal?: string) {
-  if (isShuttingDown) return
-  isShuttingDown = true
-
-  logger.info(`Shutting down gracefully... ${signal ? `(${signal})` : ''}`)
-
-  // Force-kill fallback if graceful shutdown hangs
-  const forceExitTimeout = setTimeout(() => {
-    logger.error('Shutdown timed out, forcing exit')
-    process.exit(1)
-  }, 15_000)
-  forceExitTimeout.unref()
-
-  server.close(async () => {
-    try {
-      await prisma.$disconnect()
-      await redis.quit()
-      logger.info('Resources released successfully')
-
-      process.exit(0)
-    } catch (error) {
-      logger.error('Error during shutdown', { error })
-
-      process.exit(1)
-    }
-  })
-}
-
-// Listen for termination signals to trigger graceful shutdown
-process.on('SIGINT', () => gracefulShutdown('SIGINT'))
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
-
-process.on('uncaughtException', (error: Error) => {
-  logger.error('Uncaught Exception', { error })
-  gracefulShutdown('uncaughtException')
+const shutdown = createShutdown({
+  timeoutMs: 15_000,
+  logger,
+  steps: [
+    { name: 'http server', run: closeServer },
+    {
+      name: 'queues',
+      run: () => Promise.all([emailQueue.close(), systemQueue.close()]),
+    },
+    { name: 'database', run: () => prisma.$disconnect() },
+    { name: 'redis', run: closeRedis },
+  ],
 })
 
-process.on('unhandledRejection', (reason: unknown, promise: Promise<any>) => {
-  logger.error('Unhandled Rejection at:', { reason, promise })
-  gracefulShutdown('unhandledRejection')
-})
+installProcessHandlers(shutdown, logger)

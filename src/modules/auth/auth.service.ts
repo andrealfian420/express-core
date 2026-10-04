@@ -2,7 +2,7 @@
 //   refresh-token rotation, logout, email verification and password reset.
 // Caller: auth.controller; integration tests.
 // Dependencies: auth.repository, user.repository, Prisma transactions, bcrypt, token/JWT
-//   utils, cache.service, email queue (BullMQ), logger.
+//   utils, cache.service, email queue (BullMQ), logger, config/env (token lifetimes, bcrypt cost).
 // Main Functions: register, login, refreshAccessToken, logout, verifyEmail,
 //   requestPasswordReset, resetPassword.
 // Side Effects: Writes users and refresh/verification/reset tokens; enqueues verification
@@ -22,14 +22,14 @@ import userRepository from '../user/user.repository'
 import cacheService from '../../services/cache.service'
 import { PrismaTx } from '../../types/prisma'
 import { AuthTokens, RegisterData } from './auth.types'
+import { env } from '../../config/env'
 
-const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS) || 10
-const REFRESH_TOKEN_EXPIRES_DAYS =
-  Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS) || 7
-const EMAIL_VERIFICATION_EXPIRES_HOURS =
-  Number(process.env.EMAIL_VERIFICATION_EXPIRES_HOURS) || 24
-const PASSWORD_RESET_EXPIRES_MINUTES =
-  Number(process.env.PASSWORD_RESET_EXPIRES_MINUTES) || 60
+const {
+  BCRYPT_ROUNDS,
+  REFRESH_TOKEN_EXPIRES_DAYS,
+  EMAIL_VERIFICATION_EXPIRES_HOURS,
+  PASSWORD_RESET_EXPIRES_MINUTES,
+} = env
 
 // This service contains the business logic for authentication-related operations.
 class AuthService {
@@ -283,10 +283,7 @@ class AuthService {
         throw new AppError('Token already used', 400)
       }
 
-      const hashedPassword = await bcrypt.hash(
-        newPassword,
-        Number(process.env.BCRYPT_ROUNDS),
-      )
+      const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS)
 
       await userRepository.update(
         record.userId,

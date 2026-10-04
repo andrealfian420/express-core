@@ -1,6 +1,12 @@
+// Purpose: Authenticate protected routes with an `Authorization: Bearer <JWT>` access token.
+// Caller: Module routes (users, profile, roles, activity logs, utils).
+// Dependencies: jsonwebtoken, config/env (JWT_ACCESS_SECRET), AppError.
+// Main Functions: authMiddleware (default export).
+// Side Effects: Sets req.user.sub; cookies are never accepted here.
 import { Request, Response, NextFunction } from 'express'
 import jwt, { JwtPayload } from 'jsonwebtoken'
 import AppError from '../utils/appError'
+import { env } from '../config/env'
 
 const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
   let token = null
@@ -16,10 +22,7 @@ const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
   }
 
   try {
-    // use type assertion to tell TypeScript that JWT_ACCESS_SECRET is a string
-    const secret = process.env.JWT_ACCESS_SECRET as string
-
-    const decoded = jwt.verify(token, secret) as JwtPayload
+    const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as JwtPayload
     req.user = {
       sub: Number(decoded.sub),
     }

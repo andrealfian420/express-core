@@ -1,3 +1,9 @@
+// Purpose: Provide the shared Prisma client with the soft-delete extension (User, Role).
+// Caller: Repositories, services, middleware, health checks and shutdown handlers.
+// Dependencies: @prisma/client, prisma-extension-soft-delete, config/env (NODE_ENV).
+// Main Functions: prisma (default export).
+// Side Effects: Opens database connections lazily; reuses one client per process outside production.
+import { env } from './env'
 const { PrismaClient } = require('@prisma/client')
 const { createSoftDeleteExtension } = require('prisma-extension-soft-delete')
 
@@ -31,7 +37,7 @@ declare global {
 
 const prisma = globalThis.prismaGlobal ?? prismaClientSingleton()
 
-if (process.env.NODE_ENV !== 'production') {
+if (env.NODE_ENV !== 'production') {
   globalThis.prismaGlobal = prisma
 }
 

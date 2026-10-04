@@ -1,16 +1,17 @@
 // Purpose: Manage uploaded files beneath the shared configurable storage root.
 // Caller: user.service, profile.service and other module services handling uploads.
-// Dependencies: fs, path, config/storage (uploadsRoot), APP_URL for public URLs.
+// Dependencies: fs, path, config/storage (uploadsRoot), config/env (APP_URL for public URLs).
 // Main Functions: getPublicUrl, deleteFile, fileExists.
 // Side Effects: Removes files beneath the configured upload directory.
 import fs from 'fs'
 import path from 'path'
 import { uploadsRoot } from '../config/storage'
+import { env } from '../config/env'
 
 // This service provides methods to manage files in the storage, such as generating public URLs and deleting files.
 class StorageService {
   getPublicUrl(folder: string, filename: string): string {
-    return `${process.env.APP_URL}/storage/${folder}/${filename}`
+    return `${env.APP_URL}/storage/${folder}/${filename}`
   }
 
   deleteFile(folder: string, filename: string): void {

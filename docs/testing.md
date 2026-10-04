@@ -1,6 +1,6 @@
 <!-- Purpose: Document isolated testing commands, scope, fixture safety, CI gates and known baseline defects.
 Caller: Developers, reviewers and coding agents.
-Dependencies: Makefile, scripts/test-*.cjs, scripts/test-compose.sh, docker-compose.test.yml, CI templates.
+Dependencies: Makefile, scripts/test-*.cjs, scripts/test-compose.sh, docker-compose.test.yml, CI templates, src/config/env.ts.
 Main Functions: Explain execution, structure, isolation guards, reports, CI usage and troubleshooting.
 Side Effects: None; the commands described here create and remove disposable test resources only. -->
 # Automated testing
@@ -37,13 +37,16 @@ user, password and database `express_core_test`, and Redis password `express_cor
 
 ## Structure and scope
 
-- `tests/unit`: environment guard, middleware (Bearer auth, cookie-endpoint origin guard,
-  validation, errors), storage root, tokens/JWT/slugs/links/pagination, the user response
-  serializer and request schemas. No database or Redis imports.
+- `tests/unit`: environment guard, configuration validation (`src/config/env.ts`), the
+  graceful-shutdown sequence, HTTP request logging, middleware (Bearer auth, cookie-endpoint
+  origin guard, validation, errors), storage root, tokens/JWT/slugs/links/pagination, the user
+  response serializer and request schemas. No database or Redis imports.
 - `tests/integration`: auth transactions and token lifecycles, the verification email from
   registration through a real BullMQ worker to a mocked transport and back through its link,
-  cache, readiness failures, maintenance cleanup, audit persistence, cron enqueue and Redis
-  rate limiting.
+  cache, readiness failures, maintenance cleanup, audit persistence, cron schedules (job
+  payload/options, time-slot deduplication that survives completion, enqueue failures), Redis
+  rate limiting, and the real API/worker entrypoints run as child processes
+  (`process.test.ts`).
 - `tests/http`: access matrix (401/403/200), CORS rejection, the Origin/Referer matrix on
   cookie endpoints, Bearer-only protected routes, cookie attributes, client-safe user
   payloads, profile ownership, user/role administration, audit records, soft delete and
@@ -64,12 +67,19 @@ no application secret is inherited. `assertTarget()` refuses to continue unless
 `NODE_ENV=test`, the explicit resource declaration, the test database name/user/password,
 a loopback or Compose host, the test Redis password and the temporary storage prefix all match.
 
-The runner never boots `server.ts` or `run-workers.ts`. Before migrations it repeats the
-check against the live connection (`current_database()`, `current_user`); the fixture
-helper repeats it before every truncation. All committed migrations run against the
-disposable database; seeders are not run. Before each integration/HTTP case every
-application table is truncated (migration metadata and PostGIS reference tables are kept)
-and the dedicated Redis is flushed. Suites run serially so resets never race.
+Test files never import `server.ts` or `run-workers.ts`. `tests/integration/process.test.ts`
+runs their compiled versions as child processes that inherit the test configuration, inside
+temporary working directories (removed afterwards), with the API on port 3101; each child is
+stopped with SIGTERM and killed in `finally` if it is still running. Under `NODE_ENV=test`
+`src/config/env.ts` never reads a `.env` file, so a developer `.env` cannot leak into tests;
+the process test passes a fixture `.env` only to children started in other modes.
+
+Before migrations the runner repeats the identity check against the live connection
+(`current_database()`, `current_user`); the fixture helper repeats it before every
+truncation. All committed migrations run against the disposable database; seeders are not
+run. Before each integration/HTTP case every application table is truncated (migration
+metadata and PostGIS reference tables are kept) and the dedicated Redis is flushed. Suites
+run serially so resets never race.
 
 Each test file closes the queues, both Prisma clients, Redis and the logger in an `after`
 hook. Tests that start workers must close them in `finally` before fixture teardown.
@@ -113,8 +123,6 @@ from a container.
 
 | Defect | Planned stage |
 | --- | --- |
-| Cron passes queue options as the job payload; every API process schedules cron | T3 |
-| `ENABLELOG=false` still enables HTTP log files (any non-empty string is truthy) | T3 |
 | Password-reset requests store a token but never send the email (TODO); the reset link still targets the API `POST /auth/reset-password` route instead of a client page | T4 |
 | Concurrent refreshes with one token race; the loser fails on the missing row | T5 |
 | Expired refresh/verification/reset tokens are deleted and then an error is thrown inside the same transaction, so the deletion rolls back (cron cleanup still removes them) | T5 (refresh); others noted |

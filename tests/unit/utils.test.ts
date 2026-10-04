@@ -4,7 +4,7 @@
 // Dependencies: Pure utility modules, user serializer, jsonwebtoken, an in-memory Prisma
 //   delegate double.
 // Main Functions: Utility regression cases.
-// Side Effects: Temporarily overrides APP_URL inside one test and restores it.
+// Side Effects: None.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import jwt from 'jsonwebtoken'
@@ -54,16 +54,10 @@ test('url: links join APP_URL and the path without appending PORT, and encode th
     'http://test.invalid/api/v1/auth/verify-email?token=abc123',
   )
   assert.equal(appUrl('/plain'), 'http://test.invalid/plain')
-  const original = process.env.APP_URL
-  try {
-    process.env.APP_URL = 'https://api.example.invalid:8443/'
-    assert.equal(
-      appUrl('/reset', { token: 'a b&c=d' }),
-      'https://api.example.invalid:8443/reset?token=a+b%26c%3Dd',
-    )
-  } finally {
-    process.env.APP_URL = original
-  }
+  assert.equal(
+    appUrl('/reset', { token: 'a b&c=d' }, 'https://api.example.invalid:8443/'),
+    'https://api.example.invalid:8443/reset?token=a+b%26c%3Dd',
+  )
 })
 
 test('user serializer: only allowlisted public fields leave the API', () => {

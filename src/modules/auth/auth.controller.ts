@@ -1,7 +1,7 @@
 // Purpose: HTTP layer for authentication: registration, login, refresh, logout, email
 //   verification and password reset.
 // Caller: auth.route (/api/v1/auth).
-// Dependencies: auth.service, response util, user.serializer.
+// Dependencies: auth.service, response util, user.serializer, config/env (cookie lifetime, NODE_ENV).
 // Main Functions: register, login, refreshAccessToken, verifyEmail, requestPasswordReset,
 //   resetPassword, logout.
 // Side Effects: Sets and clears the HTTP-only refreshToken cookie; sends HTTP responses.
@@ -11,10 +11,9 @@ import { Request, Response, NextFunction } from 'express'
 import authService from './auth.service'
 import response from '../../utils/response'
 import { toUserResponse } from '../user/user.serializer'
+import { env } from '../../config/env'
 
-const refreshTokenExpiryDays = Number(
-  process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7,
-)
+const refreshTokenExpiryDays = env.REFRESH_TOKEN_EXPIRES_DAYS
 
 // AuthController handles HTTP requests related to authentication.
 class AuthController {
@@ -44,7 +43,7 @@ class AuthController {
       res.cookie('refreshToken', tokens.refreshToken, {
         httpOnly: true,
         sameSite: 'lax', // use 'lax' because our api are on the subdomain of the frontend, if you are using different domains, consider using 'none' and ensure secure is true
-        secure: process.env.NODE_ENV === 'production', // Only set secure flag in production
+        secure: env.NODE_ENV === 'production', // Only set secure flag in production
         maxAge: refreshTokenExpiryDays * 86400000, // expire in days
       })
 
@@ -72,7 +71,7 @@ class AuthController {
       res.cookie('refreshToken', result.refreshToken, {
         httpOnly: true,
         sameSite: 'lax', // use 'lax' because our api are on the subdomain of the frontend, if you are using different domains, consider using 'none' and ensure secure is true
-        secure: process.env.NODE_ENV === 'production', // Only set secure flag in production
+        secure: env.NODE_ENV === 'production', // Only set secure flag in production
         maxAge: refreshTokenExpiryDays * 86400000,
       })
 
@@ -136,7 +135,7 @@ class AuthController {
       res.clearCookie('refreshToken', {
         httpOnly: true,
         sameSite: 'lax', // use 'lax' because our api are on the subdomain of the frontend, if you are using different domains, consider using 'none' and ensure secure is true
-        secure: process.env.NODE_ENV === 'production', // Only set secure flag in production
+        secure: env.NODE_ENV === 'production', // Only set secure flag in production
         maxAge: refreshTokenExpiryDays * 86400000, // expire in days
       })
 

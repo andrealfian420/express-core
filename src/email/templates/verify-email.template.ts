@@ -1,4 +1,10 @@
+// Purpose: Verification email body with the account activation link.
+// Caller: services/email.service.ts (sendVerificationEmail).
+// Dependencies: layout/base.template, config/env (APP_NAME).
+// Main Functions: verifyEmailTemplate (default export).
+// Side Effects: None (pure string rendering).
 import baseTemplate from './layout/base.template'
+import { env } from '../../config/env'
 
 interface VerifyEmailData {
   name: string
@@ -21,7 +27,7 @@ function verifyEmailTemplate(data: VerifyEmailData): string {
     </div>
     <p style="color:#9ca3af;font-size:13px;">
       This link is valid for <strong>24 hours</strong>.<br/>
-      If you did not register at ${process.env.APP_NAME || 'App'}, please ignore this email.
+      If you did not register at ${env.APP_NAME}, please ignore this email.
     </p>
   `
 

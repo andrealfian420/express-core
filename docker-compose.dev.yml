@@ -1,3 +1,8 @@
+# Purpose: Development override — hot-reload API and worker from bind-mounted sources.
+# Caller: `make dev`, `make migrate`, `make seed`, `make studio` (with docker-compose.yml).
+# Dependencies: docker-compose.yml, Dockerfile `deps` stage, ts-node-dev.
+# Main Functions: api, worker and migrate overrides.
+# Side Effects: Bind-mounts src/, prisma/ and client/storage into the containers.
 services:
   api:
     build:

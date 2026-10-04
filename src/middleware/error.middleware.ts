@@ -1,5 +1,11 @@
+// Purpose: Global Express error handler producing the standard error envelope.
+// Caller: app.ts (registered last).
+// Dependencies: config/logger, config/env (NODE_ENV).
+// Main Functions: errorHandler (default export).
+// Side Effects: Logs every error; includes stack and field errors only in development.
 import { Request, Response, NextFunction } from 'express'
 import logger from '../config/logger'
+import { env } from '../config/env'
 
 const errorHandler = (
   err: any,
@@ -9,7 +15,7 @@ const errorHandler = (
 ) => {
   const statusCode = err.statusCode || 500
   const message = err.message || 'Internal Server Error'
-  const isDev = process.env.NODE_ENV === 'development'
+  const isDev = env.NODE_ENV === 'development'
 
   logger.error(`${err.message}`, {
     stack: err.stack,

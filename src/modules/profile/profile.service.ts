@@ -1,3 +1,10 @@
+// Purpose: Business logic for the authenticated user's own profile (read, update, password change).
+// Caller: profile.controller.
+// Dependencies: profile/user/auth repositories, cache, storage and system services, Prisma
+//   transactions, bcrypt, sluggable, config/env (BCRYPT_ROUNDS).
+// Main Functions: getProfile, updateProfile.
+// Side Effects: Updates users, revokes refresh tokens on password change, writes audit logs,
+//   deletes replaced avatars, caches profiles in Redis (15 minutes).
 import AppError from '../../utils/appError'
 import profileRepository from './profile.repository'
 import storageService from '../../services/storage.service'
@@ -10,8 +17,9 @@ import bcrypt from 'bcryptjs'
 import authRepository from '../auth/auth.repository'
 import { UserProfileData } from '../user/user.types'
 import { PrismaTx } from '../../types/prisma'
+import { env } from '../../config/env'
 
-const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 10)
+const BCRYPT_ROUNDS = env.BCRYPT_ROUNDS
 
 export interface UpdateProfileInput {
   name?: string

@@ -1,3 +1,9 @@
+// Purpose: Business logic for admin user management (list, show, create, update, delete).
+// Caller: user.controller.
+// Dependencies: user.repository, Prisma transactions, bcrypt, sluggable, cache, storage and
+//   system services, config/env (BCRYPT_ROUNDS).
+// Main Functions: getUsers, getUserBySlug, getUserByEmail, createUser, updateUser, deleteUser.
+// Side Effects: Writes users and audit logs, deletes replaced avatars, invalidates RBAC cache.
 import { Request } from 'express'
 import AppError from '../../utils/appError'
 import userRepository from './user.repository'
@@ -10,8 +16,9 @@ import storageService from '../../services/storage.service'
 import { Prisma, User } from '@prisma/client'
 import { UserProfileData } from '../user/user.types'
 import { PrismaTx } from '../../types/prisma'
+import { env } from '../../config/env'
 
-const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10')
+const BCRYPT_ROUNDS = env.BCRYPT_ROUNDS
 
 // UserService contains business logic related to users.
 class UserService {

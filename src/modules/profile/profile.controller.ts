@@ -1,6 +1,6 @@
 // Purpose: HTTP layer for the authenticated user's own profile.
 // Caller: profile.route (GET/PUT /api/v1/profile) after authMiddleware.
-// Dependencies: profile.service, response util, user.serializer.
+// Dependencies: profile.service, response util, user.serializer, config/env (cookie settings).
 // Main Functions: getProfile, updateProfile.
 // Side Effects: Sends HTTP responses through toUserResponse; clears the refresh-token
 //   cookie when the password changes.
@@ -8,10 +8,9 @@ import { Request, Response, NextFunction } from 'express'
 import profileService from './profile.service'
 import response from '../../utils/response'
 import { toUserResponse } from '../user/user.serializer'
+import { env } from '../../config/env'
 
-const REFRESH_TOKEN_EXPIRES_DAYS = Number(
-  process.env.REFRESH_TOKEN_EXPIRES_DAYS,
-)
+const REFRESH_TOKEN_EXPIRES_DAYS = env.REFRESH_TOKEN_EXPIRES_DAYS
 
 class ProfileController {
   async getProfile(
@@ -44,7 +43,7 @@ class ProfileController {
         res.clearCookie('refreshToken', {
           httpOnly: true,
           sameSite: 'lax', // use 'lax' because our api are on the subdomain of the frontend, if you are using different domains, consider using 'none' and ensure secure is true
-          secure: process.env.NODE_ENV === 'production', // Only set secure flag in production
+          secure: env.NODE_ENV === 'production', // Only set secure flag in production
           maxAge: REFRESH_TOKEN_EXPIRES_DAYS * 86400000, // expire in days
         })
       }

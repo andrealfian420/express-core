@@ -3,7 +3,6 @@
 // Dependencies: cors types, config/origins (ALLOWED_ORIGINS), AppError.
 // Main Functions: corsOptions (default export).
 // Side Effects: None; a disallowed Origin is passed to the error handler as a 403 AppError.
-import 'dotenv/config'
 import { CorsOptions } from 'cors'
 import { isAllowedOrigin } from './origins'
 import AppError from '../utils/appError'

@@ -84,6 +84,7 @@ function configure() {
   process.env.SMTP_PASS = 'test'
   process.env.SMTP_FROM = 'Express Core Test <noreply@test.invalid>'
   delete process.env.ENABLELOG
+  delete process.env.LOG_TO_FILES
   process.env.STORAGE_ROOT = fs.mkdtempSync(
     path.join(os.tmpdir(), TEST_IDENTITY.storagePrefix),
   )

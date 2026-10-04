@@ -1,12 +1,18 @@
+// Purpose: Liveness (/health) and readiness (/health/ready) endpoints.
+// Caller: health.route (mounted before rate limiting); Docker/PM2 healthchecks and monitors.
+// Dependencies: Prisma, Redis, logger, config/env (NODE_ENV).
+// Main Functions: healthCheck, readyCheck.
+// Side Effects: Runs `SELECT 1` and Redis PING; dependency details hidden in production.
 import { Request, Response } from 'express'
 import prisma from '../../config/database'
 import logger from '../../config/logger'
 import redis from '../../config/redis'
+import { env } from '../../config/env'
 
 // Health Controller to check the health of the application and its dependencies
 class HealthController {
   async healthCheck(req: Request, res: Response): Promise<void> {
-    const isProd = process.env.NODE_ENV === 'production'
+    const isProd = env.NODE_ENV === 'production'
 
     const health = {
       status: 'OK',

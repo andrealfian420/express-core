@@ -1,21 +1,21 @@
 // Purpose: Configure the Express API, global middleware, and static file serving.
 // Caller: src/server.ts and isolated HTTP tests (tests/support/http.ts).
-// Dependencies: Express, security middleware, routes, config/storage, Morgan log config.
+// Dependencies: Express, security middleware, routes, config/env, config/storage,
+//   http-log middleware.
 // Main Functions: app (default export).
-// Side Effects: Serves HTTP requests and uploaded files; writes HTTP log files when ENABLELOG is set.
+// Side Effects: Serves HTTP requests and uploaded files; when ENABLELOG is true, request lines
+//   go to the application logger (no separate HTTP log files).
 import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import compression from 'compression'
-import morgan from 'morgan'
-import { createWriteStream } from 'fs'
-import logConfig from './config/log'
+import { env } from './config/env'
 import corsConfig from './config/cors'
 import helmetConfig from './config/helmet'
 import errorHandler from './middleware/error.middleware'
+import { createHttpLogMiddleware } from './middleware/http-log.middleware'
 import hpp from 'hpp'
 import xssMiddleware from './middleware/xss.middleware'
-import 'dotenv/config'
 
 import routes from './routes'
 import cookieParser from 'cookie-parser'
@@ -30,7 +30,7 @@ app.disable('x-powered-by')
 
 // place here any middlewares that
 // absolutely need to run before anything else
-if (process.env.NODE_ENV == 'production') {
+if (env.NODE_ENV === 'production') {
   app.use(compression())
 }
 
@@ -42,38 +42,18 @@ app.use(function (req: Request, res: Response, next: NextFunction) {
 app.use(cors(corsConfig))
 app.use(helmet(helmetConfig))
 
-app.use(express.urlencoded({ limit: process.env.FORMLIMIT, extended: true })) // for parsing application/x-www-form-urlencoded
-app.use(express.json({ limit: process.env.FORMLIMIT || 52428800 }))
+app.use(express.urlencoded({ limit: env.FORMLIMIT, extended: true })) // for parsing application/x-www-form-urlencoded
+app.use(express.json({ limit: env.FORMLIMIT }))
 app.use(hpp())
 app.use(cookieParser())
 app.use(xssMiddleware)
 
-if (process.env.ENABLELOG) {
-  // log success responses to access.log
-  if (process.env.NODE_ENV == 'development') {
-    app.use(
-      morgan(logConfig, {
-        skip: function (req: Request, res: Response) {
-          return !req.originalUrl.includes('api/v1') || res.statusCode >= 400
-        },
-        stream: createWriteStream('./client/storage/http-access.log', {
-          flags: 'a',
-        }),
-      }),
-    )
-  }
-
-  // log 4xx and 5xx responses to error.log
-  app.use(
-    morgan(logConfig, {
-      skip: function (req: Request, res: Response) {
-        return !req.originalUrl.includes('api/v1') || res.statusCode < 400
-      },
-      stream: createWriteStream('./client/storage/http-error.log', {
-        flags: 'a',
-      }),
-    }),
-  )
+// Request logging: 4xx/5xx always, successful /api/v1 requests in development only.
+for (const handler of createHttpLogMiddleware({
+  enabled: env.ENABLELOG,
+  logSuccess: env.NODE_ENV === 'development',
+})) {
+  app.use(handler)
 }
 
 app.use('/storage', express.static(storageRoot))

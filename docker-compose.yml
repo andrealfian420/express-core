@@ -1,3 +1,10 @@
+# Purpose: Production-like stack: PostgreSQL, Redis, one-shot migrations, API and worker.
+# Caller: `make prod`, `make dev` (with docker-compose.dev.yml), CI deploy templates.
+# Dependencies: Dockerfile stages, .env (variable substitution and env_file).
+# Main Functions: postgres, redis, migrate, api, worker services.
+# Side Effects: Creates containers, the express-core-network network and named data volumes.
+# Notes: Containers are read-only; logs go to stdout (json-file driver, rotated). Only the
+#   api mounts client/storage/logs, so LOG_TO_FILES=true is useful for the api alone.
 services:
   postgres:
     image: postgis/postgis:18-3.6
@@ -107,14 +114,13 @@ services:
       - ./client/storage/public/uploads:/app/client/storage/public/uploads
       - ./client/storage/logs:/app/client/storage/logs
     healthcheck:
+      # Node is present in every image stage (dev uses `deps`, which has no wget).
       test:
         [
           'CMD',
-          'wget',
-          '--no-verbose',
-          '--tries=1',
-          '--spider',
-          'http://localhost:${PORT:-3001}/api/v1/health/ready',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:' + (process.env.PORT || 3001) + '/api/v1/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
         ]
       interval: 30s
       timeout: 10s
@@ -150,7 +156,8 @@ services:
     container_name: express-core-worker
     restart: unless-stopped
     init: true
-    stop_grace_period: 30s
+    # Longer than the worker's own 30 s shutdown timeout, so active jobs can finish.
+    stop_grace_period: 35s
     read_only: true
     tmpfs:
       - /tmp

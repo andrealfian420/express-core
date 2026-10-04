@@ -1,8 +1,9 @@
 // Purpose: Build absolute links under APP_URL for emails and other outbound references.
 // Caller: jobs/workers/email.processor.ts.
-// Dependencies: process.env.APP_URL (scheme, host and port, e.g. http://localhost:3001).
+// Dependencies: config/env (APP_URL: scheme, host and port, e.g. http://localhost:3001).
 // Main Functions: appUrl.
 // Side Effects: None.
+import { env } from '../config/env'
 
 /**
  * Joins APP_URL with an absolute path and URL-encoded query parameters.
@@ -12,8 +13,9 @@
 export function appUrl(
   pathname: string,
   query: Record<string, string> = {},
+  baseUrl: string = env.APP_URL,
 ): string {
-  const base = (process.env.APP_URL || '').replace(/\/+$/, '')
+  const base = baseUrl.replace(/\/+$/, '')
   const search = new URLSearchParams(query).toString()
   return `${base}${pathname}${search ? `?${search}` : ''}`
 }

@@ -1,8 +1,14 @@
+// Purpose: Render and send transactional emails (verification, password reset, verified notice).
+// Caller: jobs/workers/email.processor.ts.
+// Dependencies: email/mailer (SMTP transport), email templates, logger, config/env (SMTP_FROM).
+// Main Functions: sendVerificationEmail, sendResetPasswordEmail, sendVerificationSuccessEmail.
+// Side Effects: Sends email through the SMTP transport.
 import transporter from '../email/mailer'
 import verifyEmailTemplate from '../email/templates/verify-email.template'
 import resetPasswordTemplate from '../email/templates/reset-password.template'
 import successVerifyEmailTemplate from '../email/templates/success-verify-email.template'
 import logger from '../config/logger'
+import { env } from '../config/env'
 
 interface VerifyEmailData {
   name: string
@@ -24,7 +30,7 @@ class EmailService {
 
     const html = verifyEmailTemplate(data)
     await transporter.sendMail({
-      from: process.env.SMTP_FROM,
+      from: env.SMTP_FROM,
       to,
       subject: 'Verify Your Email Address',
       html,
@@ -39,7 +45,7 @@ class EmailService {
 
     const html = resetPasswordTemplate(data)
     await transporter.sendMail({
-      from: process.env.SMTP_FROM,
+      from: env.SMTP_FROM,
       to,
       subject: 'Reset Your Password',
       html,
@@ -54,7 +60,7 @@ class EmailService {
 
     const html = successVerifyEmailTemplate(data)
     await transporter.sendMail({
-      from: process.env.SMTP_FROM,
+      from: env.SMTP_FROM,
       to,
       subject: 'Email Verified Successfully',
       html,

@@ -222,14 +222,13 @@ services:
     volumes:
       - ./client/storage/public/uploads:/app/client/storage/public/uploads
     healthcheck:
+      # Node is present in every image stage (dev uses `deps`, which has no wget).
       test:
         [
           'CMD',
-          'wget',
-          '--no-verbose',
-          '--tries=1',
-          '--spider',
-          'http://localhost:${PORT:-3001}/api/v1/health/ready',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:' + (process.env.PORT || 3001) + '/api/v1/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
         ]
       interval: 30s
       timeout: 10s
@@ -265,7 +264,8 @@ services:
     container_name: express-core-worker
     restart: unless-stopped
     init: true
-    stop_grace_period: 30s
+    # Longer than the worker's own 30 s shutdown timeout, so active jobs can finish.
+    stop_grace_period: 35s
     read_only: true
     tmpfs:
       - /tmp
@@ -644,7 +644,8 @@ This project uses a **single `.env` file** for everything:
 
 - Docker Compose reads it for `${}` variable substitution in YAML
 - Containers receive it via `env_file:` (as `process.env.*`)
-- Local development reads it via `dotenv`
+- Local development reads it through `src/config/env.ts`, which never overrides variables
+  already set in the environment and validates every value at startup
 
 ```bash
 cp .env.example .env
@@ -665,7 +666,8 @@ PORT=3001
 ENABLECORS=false
 ENABLEHELMET=false
 FORMLIMIT=52428800
-ENABLELOG=true
+ENABLELOG=true          # true/false: request lines go to the application logger
+LOG_TO_FILES=false      # containers log to stdout; files only for the api (mounted logs dir)
 
 # ==============================================================================
 # Database (PostgreSQL)
@@ -1020,6 +1022,7 @@ ENABLECORS=true
 ENABLEHELMET=true
 FORMLIMIT=52428800
 ENABLELOG=true
+LOG_TO_FILES=false      # production logs are JSON on stdout: docker compose logs -f api worker
 
 # Database — generate a strong password
 DATABASE_URL="postgresql://postgres:STRONG_PASSWORD_HERE@postgres:5432/your_db?schema=public"
@@ -1028,6 +1031,7 @@ DB_PASSWORD=STRONG_PASSWORD_HERE
 DB_NAME=your_db
 
 # JWT — generate with: node -e "console.log(require('crypto').randomBytes(512).toString('hex'))"
+# The API and worker refuse to start in production with a secret shorter than 32 characters.
 JWT_ACCESS_SECRET=GENERATE_THIS
 JWT_ACCESS_EXPIRES=15m
 REFRESH_TOKEN_EXPIRES_DAYS=7

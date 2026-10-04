@@ -18,8 +18,8 @@ A production-ready, modular **Express.js v5 + TypeScript** REST API boilerplate.
 | Validation      | Zod v4                                                      |
 | File Upload     | Multer (local disk, crypto-named files)                     |
 | Security        | Helmet, CORS, HPP, XSS sanitizer, Redis-backed Rate Limiter |
-| Logging         | Winston (daily rotating files) + Morgan (HTTP access/error) |
-| Scheduler       | node-cron                                                   |
+| Logging         | Winston (JSON stdout in production, optional files) + Morgan |
+| Scheduler       | node-cron in the worker process only                        |
 | Process Manager | PM2 or Docker Compose                                       |
 
 ---
@@ -41,13 +41,14 @@ express-core/
 │           └── uploads/        # Uploaded files (avatars, etc.)
 └── src/
     ├── app.ts                  # Express app setup: middleware stack, routes, error handler
-    ├── server.ts               # Entry point: HTTP server, cron jobs, graceful shutdown
+    ├── server.ts               # API entry point: HTTP server and graceful shutdown (no cron)
     ├── config/
     │   ├── cors.ts             # CORS policy (disallowed origins rejected with 403)
     │   ├── database.ts         # Prisma client with soft-delete extension
+    │   ├── env.ts              # Loads .env and validates all configuration (typed `env`)
     │   ├── helmet.ts           # Helmet security policy config
     │   ├── log.ts              # Morgan log format
-    │   ├── logger.ts           # Winston logger (daily rotating files)
+    │   ├── logger.ts           # Winston logger (stdout; files only with LOG_TO_FILES)
     │   ├── origins.ts          # ALLOWED_ORIGINS allowlist shared by CORS and the origin guard
     │   ├── redis.ts            # ioredis client
     │   └── storage.ts          # Storage root (STORAGE_ROOT) for uploads and /storage
@@ -55,7 +56,7 @@ express-core/
     │   ├── mailer.ts           # Nodemailer transporter
     │   └── templates/          # HTML email templates (verify, reset-password, success-verify)
     ├── jobs/
-    │   ├── run-workers.ts      # Worker process entry point (separate process)
+    │   ├── run-workers.ts      # Worker process entry point: workers, cron schedules, shutdown
     │   ├── config/
     │   │   ├── queue.config.ts    # BullMQ default job options
     │   │   └── queue.constants.ts # Queue name constants
@@ -66,10 +67,11 @@ express-core/
     │   │   ├── email.processor.ts # Email job handler (verify, reset, success links)
     │   │   ├── email.worker.ts    # BullMQ worker running the email processor
     │   │   └── system.worker.ts
-    │   └── cron/               # node-cron scheduled tasks
+    │   └── cron/               # node-cron schedules (time-slot job ids), started by the worker
     ├── middleware/
     │   ├── auth.middleware.ts       # JWT Bearer token validation
     │   ├── error.middleware.ts      # Global error handler
+    │   ├── http-log.middleware.ts   # Morgan request lines through the Winston logger
     │   ├── origin-check.middleware.ts # Origin/Referer guard for cookie auth endpoints
     │   ├── rate-limit.middleware.ts # Redis-backed rate limiters
     │   ├── rbac.middleware.ts       # RBAC permission check (Redis-cached)
@@ -96,6 +98,7 @@ express-core/
     │   └── prisma.ts       # Prisma type helpers
     └── utils/
         ├── appError.ts     # Operational error class
+        ├── graceful-shutdown.ts # Ordered shutdown + signal handlers for API and worker
         ├── jwt.ts          # JWT sign / verify helpers
         ├── paginator.ts    # Laravel-style Prisma paginator
         ├── response.ts     # Standardized JSON response helper
@@ -127,11 +130,13 @@ Client
               ├─ /utils          (apiRateLimiter · authMiddleware)
               └─ /health
 
-Background Process (run-workers.ts)
-  └─► BullMQ Worker (concurrency: 5)
-        ├─ sendVerificationEmail
-        ├─ sendResetPasswordEmail
-        └─ sendVerificationSuccessEmail
+Background Process (run-workers.ts — single instance, owns all schedules)
+  ├─► BullMQ Worker (concurrency: 5)
+  │     ├─ sendVerificationEmail
+  │     ├─ sendResetPasswordEmail
+  │     └─ sendVerificationSuccessEmail
+  └─► node-cron '0 * * * *' → systemQueue.add('cleanupExpiredTokens', {}, { jobId: 'cleanupExpiredTokens-<UTC hour>' })
+        └─ system.worker → system.service.cleanupExpiredTokens
 ```
 
 ### Database Models
@@ -291,7 +296,11 @@ Copy `.env.example` to `.env`:
 cp .env.example .env
 ```
 
-Fill in the appropriate values (adjust `REDIS_HOST` and `DATABASE_URL` for local development):
+Fill in the appropriate values (adjust `REDIS_HOST` and `DATABASE_URL` for local development).
+Variables already set in the real environment take precedence over `.env`. At startup
+`src/config/env.ts` validates the configuration and stops with a list of the invalid keys
+(for example a missing `DATABASE_URL`, `ENABLELOG=maybe` or a `JWT_ACCESS_EXPIRES` without a
+unit); in production it also rejects the example JWT secret and secrets shorter than 32 characters.
 
 ```env
 APP_NAME="App Name"
@@ -303,7 +312,8 @@ PORT=3001
 ALLOWED_ORIGINS=http://localhost:3001,http://localhost:5173
 
 FORMLIMIT=52428800
-ENABLELOG=true
+ENABLELOG=true      # log /api/v1 requests (true/false)
+LOG_TO_FILES=false  # also write client/storage/logs/*.log
 
 # PostgreSQL (use localhost for local dev, not "postgres")
 DATABASE_URL="postgresql://user:password@localhost:5432/your_database?schema=public"
@@ -488,7 +498,7 @@ Zero-downtime reload after deployment:
 pm2 reload ecosystem.config.js --env production
 ```
 
-> The API (`dist/server.js`) runs in **cluster** mode across all CPU cores. The worker (`dist/jobs/run-workers.js`) runs in **fork** mode with BullMQ internal concurrency of 5.
+> The API (`dist/server.js`) runs in **cluster** mode across all CPU cores. The worker (`dist/jobs/run-workers.js`) runs in **fork** mode with BullMQ internal concurrency of 5; it is the only process that schedules cron jobs, so keep it at one instance. `cwd` pins `.env` and `client/storage` to the project root, and `kill_timeout` (API 20 s, worker 35 s) gives both processes time to finish their graceful shutdown before PM2 kills them.
 
 ---
 
@@ -529,7 +539,11 @@ For full implementation details, see [DOCKER_IMPLEMENTATION.md](DOCKER_IMPLEMENT
 
 - **PostgreSQL**: `pg_isready` every 10s
 - **Redis**: `redis-cli ping` (with auth) every 10s
-- **API**: `GET /api/v1/health/ready` every 30s (start period: 15s) — returns 503 if DB or Redis is down
+- **API**: `GET /api/v1/health/ready` every 30s (start period: 15s) via `node -e "fetch(...)"`, so it also works in the `deps` image used by `make dev`; returns 503 if DB or Redis is down
+- **Worker**: `/tmp/worker-health` must be younger than one minute (rewritten every 10s)
+
+On `SIGTERM` (for example `docker compose stop`) the API closes HTTP, queues, PostgreSQL and
+Redis; the worker also stops its schedules and lets active jobs finish (grace period 35s).
 
 ### Environment File
 
@@ -537,7 +551,8 @@ A single `.env` file is used for everything:
 
 - Docker Compose reads it for `${}` variable substitution in YAML
 - Containers receive it via `env_file:` (as `process.env.*`)
-- Local development reads it via `dotenv`
+- Local development reads it through `src/config/env.ts`, which never overrides variables
+  already set in the environment
 
 Template: `.env.example`
 
@@ -669,13 +684,18 @@ http://localhost:3001/storage/uploads/{folder}/{filename}
 
 ## Logging
 
-| Log File                         | Contents                                   |
-| -------------------------------- | ------------------------------------------ |
-| `client/storage/logs/`           | Winston daily rotating application logs    |
-| `client/storage/http-access.log` | Morgan HTTP access log (2xx/3xx, dev only) |
-| `client/storage/http-error.log`  | Morgan HTTP error log (4xx/5xx)            |
+| Environment   | Output                                                                     |
+| ------------- | -------------------------------------------------------------------------- |
+| `production`  | JSON lines on stdout (`docker compose logs`, `pm2 logs`)                   |
+| other         | Readable console output                                                    |
+| `test`        | Silent                                                                     |
+| non-test      | `LOG_TO_FILES=true` also writes `client/storage/logs/{error,combined}.log` |
 
-Set `ENABLELOG=false` in `.env` to disable HTTP logging.
+`ENABLELOG=true` adds one line per `/api/v1` request through the same logger: 4xx/5xx at
+`warn` in every environment, successful requests at `info` in development only. No
+separate HTTP log files are written, so read-only containers keep working. In Docker only
+the `api` service mounts `client/storage/logs`; leave `LOG_TO_FILES=false` there unless you
+need files.
 
 ---
 
