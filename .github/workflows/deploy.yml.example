@@ -1,4 +1,12 @@
-# GitHub Actions: Build, Push to GHCR, Deploy to VPS
+# Purpose: GitHub Actions template — verify (build + full test suite), build and push the
+#   production image to GHCR, then deploy to a VPS with Docker Compose.
+# Caller: GitHub Actions on pushes to main (after copying to .github/workflows/deploy.yml).
+# Dependencies: GitHub service containers (PostgreSQL, Redis), docker/* actions,
+#   appleboy/ssh-action, VPS with docker compose and the project's .env.
+# Main Jobs: verify (blocks everything after it), build-and-push, deploy.
+# Side Effects: Uploads test reports, pushes images to GHCR, restarts containers on the VPS.
+#
+# GitHub Actions: Verify, Build, Push to GHCR, Deploy to VPS
 #
 # Setup:
 #   1. Copy to .github/workflows/deploy.yml (remove .example)
@@ -22,8 +30,66 @@ env:
   DEPLOY_PATH: /opt/your-project # path on VPS where compose files live
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    # Disposable test services; identity must match scripts/test-environment.cjs.
+    services:
+      postgres:
+        image: postgis/postgis:18-3.6
+        env:
+          POSTGRES_USER: express_core_test
+          POSTGRES_PASSWORD: express_core_test
+          POSTGRES_DB: express_core_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U express_core_test -d express_core_test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+      redis:
+        image: redis:8.8.0
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install, generate and build
+        run: |
+          npm ci
+          npx prisma generate
+          npm run build
+
+      # The Redis service starts without authentication; set the test-only password first.
+      - name: Secure test Redis
+        run: node -e "const R=require('ioredis'); const r=new R(); r.config('SET','requirepass','express_core_test').then(()=>r.quit()).catch(()=>process.exit(1))"
+
+      - name: Full test suite with coverage
+        run: npm run test:ci
+        env:
+          TEST_RESOURCE_OWNER: express-core-test
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            test-results/
+            coverage/
+
   build-and-push:
     runs-on: ubuntu-latest
+    needs: verify
     permissions:
       contents: read
       packages: write

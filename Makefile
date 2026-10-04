@@ -1,4 +1,11 @@
-.PHONY: dev prod build migrate seed logs down clean
+# Purpose: Developer convenience wrapper around Docker Compose commands.
+# Caller: Developers, invoked directly (e.g. `make dev`, `make test module=auth`).
+# Dependencies: docker-compose*.yml, isolated docker-compose.test.yml, scripts/test-compose.sh.
+# Main Functions: dev, prod, build, migrate, seed, logs, down, clean, shell, studio,
+#   test, test-unit, test-watch, test-integration, test-http, test-down.
+# Side Effects: Starts/stops Docker containers; migrate/seed write to the development DB;
+#   test targets use only the disposable express-core-testing Compose project.
+.PHONY: dev prod build migrate seed logs down clean shell studio
 
 # Development (full Docker with hot-reload)
 dev:
@@ -39,3 +46,19 @@ shell:
 # Prisma studio
 studio:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api npx prisma studio
+
+# Automated tests (isolated stack; safe while the development stack is running).
+# Usage: make test | make test-unit module=auth | make test-down
+.PHONY: test test-unit test-watch test-integration test-http test-down
+test:
+	sh scripts/test-compose.sh ci $(module)
+test-unit:
+	sh scripts/test-compose.sh unit $(module)
+test-watch:
+	sh scripts/test-compose.sh watch $(module)
+test-integration:
+	sh scripts/test-compose.sh integration $(module)
+test-http:
+	sh scripts/test-compose.sh http $(module)
+test-down:
+	docker compose --env-file /dev/null -p express-core-testing -f docker-compose.test.yml down --volumes --remove-orphans

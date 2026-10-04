@@ -1,4 +1,14 @@
-# Bitbucket Pipelines: Build, Push to Bitbucket Packages, Deploy to VPS
+# Purpose: Bitbucket Pipelines template — verify (build + full test suite), build and push
+#   the production image to Bitbucket Packages, then deploy to a VPS with Docker Compose.
+# Caller: Bitbucket Pipelines on pushes to main (after copying to bitbucket-pipelines.yml).
+# Dependencies: Bitbucket service containers (PostgreSQL, Redis), Docker service,
+#   atlassian/ssh-run pipe, VPS with docker compose and the project's .env.
+# Main Steps: 1) Verify — npm ci, prisma generate, build, unit/integration/HTTP tests with
+#   JUnit and coverage reports; any failure blocks the following steps.
+#   2) Build & Push Image. 3) Deploy to VPS with a readiness check.
+# Side Effects: Pushes images to the registry, restarts containers on the VPS.
+#
+# Bitbucket Pipelines: Verify, Build, Push to Bitbucket Packages, Deploy to VPS
 #
 # Setup:
 #   1. Copy to bitbucket-pipelines.yml (remove .example)
@@ -22,10 +32,46 @@ definitions:
   services:
     docker:
       memory: 2048
+    # Disposable test services; identity must match scripts/test-environment.cjs.
+    postgres:
+      image: postgis/postgis:18-3.6
+      memory: 512
+      variables:
+        POSTGRES_USER: express_core_test
+        POSTGRES_PASSWORD: express_core_test
+        POSTGRES_DB: express_core_test
+    redis:
+      image: redis:8.8.0
+      memory: 256
 
 pipelines:
   branches:
     main:
+      - step:
+          name: Verify (build + tests)
+          image: node:24
+          services:
+            - postgres
+            - redis
+          caches:
+            - node
+          script:
+            - npm ci
+            - npx prisma generate
+            - npm run build
+            # The Redis service starts without authentication; set the test-only password first.
+            - node -e "const R=require('ioredis'); const r=new R(); r.config('SET','requirepass','express_core_test').then(()=>r.quit()).catch(()=>process.exit(1))"
+            - export TEST_RESOURCE_OWNER=express-core-test
+            - npm run test:ci
+          artifacts:
+            upload:
+              - name: test-reports
+                type: scoped
+                paths:
+                  - test-results/**
+                  - coverage/**
+                capture-on: always
+
       - step:
           name: Build & Push Image
           services:

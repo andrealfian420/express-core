@@ -264,6 +264,7 @@ make seed
 | `make studio`  | Open Prisma Studio                               |
 | `make down`    | Stop all containers                              |
 | `make clean`   | Stop containers and remove volumes (fresh start) |
+| `make test`    | Full isolated test suite with coverage (see [Testing](#testing)) |
 
 ---
 
@@ -656,11 +657,29 @@ Set `ENABLELOG=false` in `.env` to disable HTTP logging.
 
 ---
 
+## Testing
+
+Automated tests run in a disposable Docker stack (separate PostgreSQL, Redis and
+temporary storage) and never touch the development database or `.env`:
+
+```bash
+make test                      # unit + integration + HTTP, JUnit and coverage reports
+make test-unit module=utils    # one suite, filtered by test file name
+make test-down                 # remove a stack left by an interrupted run
+```
+
+Reports are written to `test-results/` and `coverage/`. See
+[docs/testing.md](docs/testing.md) for scope, isolation guards, CI usage and known baseline defects.
+
+---
+
 ## Lint
 
 ```bash
 npm run lint
 ```
+
+> The ESLint configuration currently fails to load; see [docs/testing.md](docs/testing.md#known-baseline-defects).
 
 ---
 

@@ -1,3 +1,8 @@
+// Purpose: Configure the Express API, global middleware, and static file serving.
+// Caller: src/server.ts and isolated HTTP tests (tests/support/http.ts).
+// Dependencies: Express, security middleware, routes, config/storage, Morgan log config.
+// Main Functions: app (default export).
+// Side Effects: Serves HTTP requests and uploaded files; writes HTTP log files when ENABLELOG is set.
 import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -14,6 +19,7 @@ import 'dotenv/config'
 
 import routes from './routes'
 import cookieParser from 'cookie-parser'
+import { storageRoot } from './config/storage'
 
 const app = express()
 app.set('trust proxy', 1)
@@ -70,7 +76,7 @@ if (process.env.ENABLELOG) {
   )
 }
 
-app.use('/storage', express.static('./client/storage/public'))
+app.use('/storage', express.static(storageRoot))
 app.use('/api/v1/', routes)
 app.use(errorHandler)
 

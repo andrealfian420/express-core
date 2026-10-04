@@ -1,3 +1,8 @@
+# Purpose: Exclude dependencies, secrets, runtime storage and generated test artifacts from Git.
+# Caller: Git.
+# Dependencies: Test runner output paths (.test-build, test-results, coverage).
+# Main Functions: Ignore patterns.
+# Side Effects: None.
 # Created by https://www.toptal.com/developers/gitignore/api/node,linux,macos,windows
 # Edit at https://www.toptal.com/developers/gitignore?templates=node,linux,macos,windows
 
@@ -222,3 +227,7 @@ $RECYCLE.BIN/
 
 .vscode/
 .dist/
+
+# Automated test artifacts
+.test-build
+test-results

@@ -1,0 +1,49 @@
+# Purpose: Disposable testing stack independent of development and production.
+# Caller: scripts/test-compose.sh (Makefile testing targets).
+# Dependencies: Dockerfile deps stage, PostgreSQL (same image as development), Redis, Node 24.
+# Main Functions: runner, postgres and redis test services.
+# Side Effects: Creates isolated containers with tmpfs data; writes test reports to the host.
+# Notes: No host ports, no application .env file and no named volumes are used.
+services:
+  postgres:
+    image: postgis/postgis:18-3.6
+    environment:
+      POSTGRES_USER: express_core_test
+      POSTGRES_PASSWORD: express_core_test
+      POSTGRES_DB: express_core_test
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U express_core_test -d express_core_test']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:8.8.0
+    command: redis-server --requirepass express_core_test --save '' --appendonly no
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', 'express_core_test', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  runner:
+    build:
+      context: .
+      target: deps
+    working_dir: /app
+    init: true
+    environment:
+      NODE_ENV: test
+      TEST_RESOURCE_OWNER: express-core-test
+      TEST_DB_HOST: postgres
+      TEST_REDIS_HOST: redis
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+      - ./scripts:/app/scripts:ro
+      - ./prisma:/app/prisma:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - ./tsconfig.test.json:/app/tsconfig.test.json:ro
+      - ./test-results:/app/test-results
+      - ./coverage:/app/coverage
+    command: npm run test:ci

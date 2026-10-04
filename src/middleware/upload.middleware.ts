@@ -1,10 +1,16 @@
+// Purpose: Build Multer upload middleware with MIME/extension validation and per-field limits.
+// Caller: Module routes (user and profile avatar uploads).
+// Dependencies: multer, crypto, fs, path, config/storage (uploadsRoot).
+// Main Functions: createUploader, createFieldsUploader.
+// Side Effects: Creates upload folders at import time and writes uploaded files to local storage.
 import { Request, Response, NextFunction } from 'express'
 import multer, { Field, FileFilterCallback } from 'multer'
 import path from 'path'
 import crypto from 'crypto'
 import fs from 'fs'
+import { uploadsRoot } from '../config/storage'
 
-const STORAGE_PATH = path.join(process.cwd(), 'client/storage/public/uploads')
+const STORAGE_PATH = uploadsRoot
 
 // Set type as Record<string, string>
 // to avoid TypeScript error when accessing MIME_EXT_MAP with a dynamic key

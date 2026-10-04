@@ -1,0 +1,15 @@
+// Purpose: Compile application sources and automated tests separately with source maps.
+// Caller: scripts/test-runner.cjs.
+// Dependencies: tsconfig.json, TypeScript.
+// Main Functions: Test compilation configuration (rootDir widened to include tests/).
+// Side Effects: Writes .test-build only; production dist/ is never touched.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": ".test-build",
+    "sourceMap": true
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", "dist", ".test-build"]
+}

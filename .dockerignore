@@ -1,3 +1,8 @@
+# Purpose: Exclude local dependencies, secrets and generated test artifacts from the Docker build context.
+# Caller: Docker build (Dockerfile stages, docker-compose*.yml builds).
+# Dependencies: Test runner output paths.
+# Main Functions: Ignore patterns.
+# Side Effects: None.
 node_modules
 dist
 .env
@@ -28,3 +33,7 @@ docker-compose*.yml
 # Dev tools
 .eslintcache
 coverage
+
+# Automated test artifacts
+.test-build
+test-results
