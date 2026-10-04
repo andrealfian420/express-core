@@ -1,7 +1,7 @@
 <!-- Purpose: Document isolated testing commands, scope, fixture safety, CI gates and known baseline defects.
 Caller: Developers, reviewers and coding agents.
 Dependencies: Makefile, scripts/test-*.cjs, scripts/test-compose.sh, docker-compose.test.yml, CI templates, src/config/env.ts.
-Main Functions: Explain execution, structure, isolation guards, reports, CI usage and troubleshooting.
+Main Functions: Explain execution, structure (including outbox, relay, dead-letter and email delivery suites), isolation guards, reports, CI usage and troubleshooting.
 Side Effects: None; the commands described here create and remove disposable test resources only. -->
 # Automated testing
 
@@ -38,15 +38,19 @@ user, password and database `express_core_test`, and Redis password `express_cor
 ## Structure and scope
 
 - `tests/unit`: environment guard, configuration validation (`src/config/env.ts`), the
-  graceful-shutdown sequence, HTTP request logging, middleware (Bearer auth, cookie-endpoint
-  origin guard, validation, errors), storage root, tokens/JWT/slugs/links/pagination, the user
-  response serializer and request schemas. No database or Redis imports.
-- `tests/integration`: auth transactions and token lifecycles, the verification email from
-  registration through a real BullMQ worker to a mocked transport and back through its link,
-  cache, readiness failures, maintenance cleanup, audit persistence, cron schedules (job
-  payload/options, time-slot deduplication that survives completion, enqueue failures), Redis
-  rate limiting, and the real API/worker entrypoints run as child processes
-  (`process.test.ts`).
+  graceful-shutdown sequence, HTTP request logging, mail failure classification, middleware
+  (Bearer auth, cookie-endpoint origin guard, validation, errors), storage root,
+  tokens/JWT/slugs/links/timeouts/pagination, the user response serializer and request
+  schemas. No database or Redis imports.
+- `tests/integration`: auth transactions, token lifecycles and the email intents they write to
+  the outbox (atomic with the business write, independent of Redis); the transactional outbox
+  and relay (`outbox.test.ts`: rollback, disjoint concurrent claims, lease recovery,
+  idempotent publishing, backoff, atomic dead-lettering, drain on stop, bounded retention);
+  email delivery through outbox → relay → real worker → mocked transport for verification and
+  reset links, transient retries, the sent marker, permanent failures and dead-letter writes
+  (`email-worker.test.ts`); the once-only re-drive and its CLI (`dead-letter.test.ts`); cache,
+  readiness failures, maintenance cleanup, audit persistence, cron schedules, Redis rate
+  limiting, and the real API/worker entrypoints run as child processes (`process.test.ts`).
 - `tests/http`: access matrix (401/403/200), CORS rejection, the Origin/Referer matrix on
   cookie endpoints, Bearer-only protected routes, cookie attributes, client-safe user
   payloads, profile ownership, user/role administration, audit records, soft delete and
@@ -80,6 +84,10 @@ truncation. All committed migrations run against the disposable database; seeder
 run. Before each integration/HTTP case every application table is truncated (migration
 metadata and PostGIS reference tables are kept) and the dedicated Redis is flushed. Suites
 run serially so resets never race.
+
+`outbox.test.ts` proves the atomic dead-lettering by installing a temporary trigger that
+rejects inserts into `dead_letter_jobs`; it checks the live database identity first and
+drops the trigger and its function in `finally`.
 
 Each test file closes the queues, both Prisma clients, Redis and the logger in an `after`
 hook. Tests that start workers must close them in `finally` before fixture teardown.
@@ -123,7 +131,6 @@ from a container.
 
 | Defect | Planned stage |
 | --- | --- |
-| Password-reset requests store a token but never send the email (TODO); the reset link still targets the API `POST /auth/reset-password` route instead of a client page | T4 |
 | Concurrent refreshes with one token race; the loser fails on the missing row | T5 |
 | Expired refresh/verification/reset tokens are deleted and then an error is thrown inside the same transaction, so the deletion rolls back (cron cleanup still removes them) | T5 (refresh); others noted |
 | `npm run lint` crashes ("object is not iterable"): `eslint.config.mjs` imports `@typescript-eslint/eslint-plugin` instead of `typescript-eslint`, and its legacy `configs.recommended` object cannot be spread into a flat config | Outside the plan; needs approval |

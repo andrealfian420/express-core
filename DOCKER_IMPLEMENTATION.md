@@ -692,6 +692,8 @@ REFRESH_TOKEN_EXPIRES_DAYS=7
 EMAIL_VERIFICATION_EXPIRES_HOURS=24
 PASSWORD_RESET_EXPIRES_MINUTES=30
 BCRYPT_ROUNDS=10
+# Required: client page that receives ?token=… from the password-reset email
+PASSWORD_RESET_URL="http://localhost:5173/reset-password"
 
 # ==============================================================================
 # SMTP Mail
@@ -1038,6 +1040,8 @@ REFRESH_TOKEN_EXPIRES_DAYS=7
 EMAIL_VERIFICATION_EXPIRES_HOURS=24
 PASSWORD_RESET_EXPIRES_MINUTES=30
 BCRYPT_ROUNDS=12
+# Required: client page that receives ?token=… from the password-reset email
+PASSWORD_RESET_URL="https://example.com/reset-password"
 
 # SMTP
 SMTP_HOST=smtp.your-provider.com

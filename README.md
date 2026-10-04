@@ -14,7 +14,7 @@ A production-ready, modular **Express.js v5 + TypeScript** REST API boilerplate.
 | Cache / Queue   | Redis (ioredis) + BullMQ                                    |
 | Auth            | JWT (access token + HTTP-only refresh token cookie)         |
 | Authorization   | RBAC with Redis-cached role permissions                     |
-| Email           | Nodemailer (SMTP) via BullMQ async queue                    |
+| Email           | Nodemailer (SMTP) via transactional outbox → BullMQ, dead-letter store |
 | Validation      | Zod v4                                                      |
 | File Upload     | Multer (local disk, crypto-named files)                     |
 | Security        | Helmet, CORS, HPP, XSS sanitizer, Redis-backed Rate Limiter |
@@ -31,7 +31,7 @@ express-core/
 ├── ecosystem.config.js         # PM2 process config (api + worker)
 ├── tsconfig.json
 ├── prisma/
-│   ├── schema.prisma           # DB models: Role, User, RefreshToken, EmailVerificationToken, PasswordResetToken, ActivityLog
+│   ├── schema.prisma           # DB models: Role, User, RefreshToken, EmailVerificationToken, PasswordResetToken, ActivityLog, Outbox, DeadLetterJob
 │   ├── seed.js                 # Seeds initial admin user & role
 │   └── migrations/             # Prisma SQL migration history
 ├── client/
@@ -53,20 +53,24 @@ express-core/
     │   ├── redis.ts            # ioredis client
     │   └── storage.ts          # Storage root (STORAGE_ROOT) for uploads and /storage
     ├── email/
-    │   ├── mailer.ts           # Nodemailer transporter
+    │   ├── mailer.ts           # Mail transport (SMTP) + permanent/transient failure classification
     │   └── templates/          # HTML email templates (verify, reset-password, success-verify)
     ├── jobs/
-    │   ├── run-workers.ts      # Worker process entry point: workers, cron schedules, shutdown
+    │   ├── run-workers.ts      # Worker process entry point: workers, outbox relay, cron schedules, shutdown
     │   ├── config/
     │   │   ├── queue.config.ts    # BullMQ default job options
-    │   │   └── queue.constants.ts # Queue name constants
+    │   │   └── queue.constants.ts # Queue and job name constants
     │   ├── queues/
     │   │   ├── email.queue.ts  # BullMQ email queue
     │   │   └── system.queue.ts # BullMQ system queue
+    │   ├── relay/
+    │   │   └── outbox-relay.ts    # Publishes outbox intents to BullMQ (lease, retry, dead-letter)
     │   ├── workers/
-    │   │   ├── email.processor.ts # Email job handler (verify, reset, success links)
+    │   │   ├── email.processor.ts # Email job handler (links, sent marker, permanent failures)
     │   │   ├── email.worker.ts    # BullMQ worker running the email processor
-    │   │   └── system.worker.ts
+    │   │   ├── system.processor.ts # Maintenance job handler (token cleanup, retention)
+    │   │   ├── system.worker.ts
+    │   │   └── worker-logging.ts  # Job lifecycle logs + dead-lettering of final failures
     │   └── cron/               # node-cron schedules (time-slot job ids), started by the worker
     ├── middleware/
     │   ├── auth.middleware.ts       # JWT Bearer token validation
@@ -84,13 +88,17 @@ express-core/
     │   ├── profile/        # Logged-in user profile (auth + avatar upload)
     │   ├── role/           # Role CRUD + access list (auth + RBAC)
     │   ├── activity-log/   # Audit trail viewer (auth + RBAC)
+    │   ├── outbox/         # Transactional outbox repository (intents, claims, retention)
+    │   ├── dead-letter/    # Dead-letter store + audited once-only re-drive
     │   ├── health/         # Health check endpoint
     │   └── helper/         # Utility endpoints (role-options dropdown, etc.)
     ├── routes/
     │   └── index.ts        # Route aggregator under /api/v1/
+    ├── scripts/
+    │   └── redrive-dlq.ts  # Operator CLI: re-drive one dead-lettered job
     ├── services/
     │   ├── cache.service.ts   # Redis get/set/del/sadd/smembers wrapper
-    │   ├── email.service.ts   # Nodemailer send helpers (verify, reset, success)
+    │   ├── email.service.ts   # Email rendering + sendMail (verify, reset, success)
     │   ├── storage.service.ts # File deletion helper
     │   └── system.service.ts
     ├── types/
@@ -121,7 +129,7 @@ Client
         └─ /api/v1/
               ├─ /auth           (auth-specific rate limiters · checkOrigin on login/refresh/logout)
               │    └─ auth.route → auth.controller → auth.service → auth.repository → Prisma
-              │                                                   └─ emailQueue → BullMQ → email.worker → email.processor → Nodemailer
+              │                                                   └─ outbox row (same transaction; no Redis on the request path)
               ├─ /users          (apiRateLimiter · authMiddleware · checkPermission)
               │    └─ user.route → user.controller → user.service → user.repository → Prisma
               ├─ /profile        (apiRateLimiter · authMiddleware)
@@ -131,12 +139,15 @@ Client
               └─ /health
 
 Background Process (run-workers.ts — single instance, owns all schedules)
-  ├─► BullMQ Worker (concurrency: 5)
+  ├─► Outbox relay (every OUTBOX_RELAY_INTERVAL_MS) → claim PENDING rows (lease, SKIP LOCKED)
+  │     → queue.add(name, payload, { jobId: 'outbox-<id>' }) → PUBLISHED | retry with backoff | dead letter
+  ├─► BullMQ email worker (concurrency: 5)
   │     ├─ sendVerificationEmail
   │     ├─ sendResetPasswordEmail
-  │     └─ sendVerificationSuccessEmail
-  └─► node-cron '0 * * * *' → systemQueue.add('cleanupExpiredTokens', {}, { jobId: 'cleanupExpiredTokens-<UTC hour>' })
-        └─ system.worker → system.service.cleanupExpiredTokens
+  │     └─ sendVerificationSuccessEmail      (final failures → dead_letter_jobs)
+  ├─► node-cron '0 * * * *' → cleanupExpiredTokens   (jobId: '<name>-<UTC hour>')
+  └─► node-cron '0 0 * * *' → cleanupOutbox, cleanupDeadLetterJobs   (jobId: '<name>-<UTC day>')
+        └─ system.worker → system.service
 ```
 
 ### Database Models
@@ -149,6 +160,8 @@ Background Process (run-workers.ts — single instance, owns all schedules)
 | `EmailVerificationToken` | `token` (UUID), `userId`, `expiresAt`                                               | Cascades on user delete       |
 | `PasswordResetToken`     | `token` (UUID), `userId`, `expiresAt`, `usedAt`                                     | Cascades on user delete       |
 | `ActivityLog`            | `userId`, `action`, `description`, `subjectType`, `subjectId`, `oldData`, `newData` | Audit trail                   |
+| `Outbox`                 | `queueName`, `jobName`, `payload`, `status`, `attempts`, `availableAt`             | Email/job intents; pruned     |
+| `DeadLetterJob`          | `queueName`, `jobName`, `jobId`, `payload`, `failedReason`, `redrivenAt`           | Final failures; pruned        |
 
 ### RBAC System
 
@@ -269,6 +282,7 @@ make seed
 | `make build`   | Build Docker images only                         |
 | `make migrate` | Run Prisma migrations (dev mode)                 |
 | `make seed`    | Run database seeder                              |
+| `make redrive id=… by=…` | Re-drive one dead-lettered job (once)  |
 | `make logs`    | Tail all container logs                          |
 | `make shell`   | Shell into the API container                     |
 | `make studio`  | Open Prisma Studio                               |
@@ -326,6 +340,8 @@ REFRESH_TOKEN_EXPIRES_DAYS=7
 EMAIL_VERIFICATION_EXPIRES_HOURS=24
 PASSWORD_RESET_EXPIRES_MINUTES=30
 BCRYPT_ROUNDS=10
+# Required: client page that receives ?token=… from the password-reset email
+PASSWORD_RESET_URL=http://localhost:5173/reset-password
 
 # SMTP Mail
 SMTP_HOST=sandbox.smtp.mailtrap.io
@@ -594,7 +610,7 @@ Base URL: `http://localhost:3001/api/v1`
 | POST   | `/auth/logout`                 | ✓    | Logout — clears refresh token                      |
 | POST   | `/auth/refresh`                | ✓    | Renew access token via HTTP-only refresh cookie    |
 | GET    | `/auth/verify-email?token=`    |      | Verify email address                               |
-| POST   | `/auth/request-password-reset` |      | Send password reset email                          |
+| POST   | `/auth/request-password-reset` |      | Email a reset link (`PASSWORD_RESET_URL?token=…`)  |
 | POST   | `/auth/reset-password`         |      | Reset password with token                          |
 
 Browser protection:
@@ -662,6 +678,35 @@ identifier. The paginated `GET /users` list still returns `id` and the nested `r
 | ------ | --------------- | ------------------------------------------------- |
 | GET    | `/health`       | Check server status (always 200)                  |
 | GET    | `/health/ready` | Readiness check — returns 503 if DB/Redis is down |
+
+---
+
+## Email Delivery and Dead Letters
+
+Emails are never sent from the request path. Registration, email verification and
+password-reset requests write an **outbox** row in the same database transaction as the
+change itself, so a rollback removes the intent and a Redis outage cannot lose it. The
+worker's relay publishes due rows to BullMQ (job id `outbox-<id>`), retries Redis failures
+with exponential backoff, and dead-letters a row after `OUTBOX_MAX_PUBLISH_ATTEMPTS`.
+
+The email worker retries transient SMTP failures (timeouts, 4xx) and fails permanent ones
+(5xx, rejected recipients, missing mail configuration, unknown jobs) immediately. Final
+failures are copied to `dead_letter_jobs`. A Redis marker (`email:sent:<jobId>`, 24 h)
+stops retries and re-publishes of the same job from sending twice; delivery is still
+at-least-once (a crash between sending and writing the marker can repeat one email).
+
+Re-drive a dead-lettered job after fixing its cause (for example SMTP credentials):
+
+```bash
+make redrive id=42 by=alice      # or: npm run dlq:redrive -- 42 --by alice
+```
+
+A row can be re-driven only once (stamped with `redriven_at`, `redriven_by` and the new
+outbox id). Verification and reset emails are refused when their token is gone, expired
+or used — the user must request a new email. Published outbox rows keep no payload;
+`dead_letter_jobs` payloads can contain tokens and email addresses, have no HTTP endpoint,
+and are pruned daily (`OUTBOX_RETENTION_PUBLISHED_DAYS`, `OUTBOX_RETENTION_FAILED_DAYS`,
+`DLQ_RETENTION_DAYS`).
 
 ---
 

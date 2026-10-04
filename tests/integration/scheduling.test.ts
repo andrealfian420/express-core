@@ -1,5 +1,6 @@
-// Purpose: Verify maintenance schedules (registration, job payload/options, time-slot
-//   deduplication that survives completion, enqueue failures) and Redis-backed rate limiting.
+// Purpose: Verify maintenance schedules (hourly token cleanup and daily retention: registration,
+//   job payload/options, time-slot deduplication that survives completion, enqueue failures)
+//   and Redis-backed rate limiting.
 // Caller: Node integration runner.
 // Dependencies: node-cron (mocked schedule), system queue, a test-owned BullMQ worker,
 //   Express, Supertest and isolated Redis.
@@ -38,7 +39,7 @@ test('cron: slot ids are deterministic UTC hour/day keys and options keep the sl
   })
 })
 
-test('cron: register the hourly cleanup; repeated ticks enqueue one job with an empty payload and options as options', async (t) => {
+test('cron: register hourly cleanup and daily retention; repeated ticks enqueue each job once with an empty payload', async (t) => {
   const schedules: { expression: string; callback: () => Promise<void> }[] = []
   t.mock.method(cron, 'schedule', (expression: string, callback: any) => {
     schedules.push({ expression, callback })
@@ -48,21 +49,27 @@ test('cron: register the hourly cleanup; repeated ticks enqueue one job with an 
   assert.equal(tasks.length, SCHEDULES.length)
   assert.deepEqual(
     schedules.map((s) => s.expression),
-    ['0 * * * *'],
+    ['0 * * * *', '0 0 * * *'],
   )
-  // Two ticks in one slot (e.g. two worker processes) must produce a single job.
+  // Two ticks in one slot (e.g. two worker processes) must produce a single job each.
   for (const s of schedules) {
     await s.callback()
     await s.callback()
   }
   const waiting = await systemQueue.getWaiting()
-  assert.equal(waiting.length, 1)
-  const [job] = waiting
-  assert.equal(job.name, 'cleanupExpiredTokens')
+  const byName = Object.fromEntries(waiting.map((job) => [job.name, job]))
+  assert.deepEqual(Object.keys(byName).sort(), [
+    'cleanupDeadLetterJobs',
+    'cleanupExpiredTokens',
+    'cleanupOutbox',
+  ])
+  assert.equal(waiting.length, 3)
   // Regression: the options object used to be passed as the job payload.
-  assert.deepEqual(job.data, {})
-  assert.match(job.id!, /^cleanupExpiredTokens-\d{4}-\d{2}-\d{2}T\d{2}$/)
-  assert.deepEqual(job.opts.removeOnComplete, { age: 7_200 })
+  for (const job of waiting) assert.deepEqual(job.data, {})
+  assert.match(byName.cleanupExpiredTokens.id!, /^cleanupExpiredTokens-\d{4}-\d{2}-\d{2}T\d{2}$/)
+  assert.deepEqual(byName.cleanupExpiredTokens.opts.removeOnComplete, { age: 7_200 })
+  assert.match(byName.cleanupOutbox.id!, /^cleanupOutbox-\d{4}-\d{2}-\d{2}$/)
+  assert.deepEqual(byName.cleanupOutbox.opts.removeOnComplete, { age: 172_800 })
 })
 
 test('cron: duplicate enqueues in one slot run once, even after the job completed', async () => {

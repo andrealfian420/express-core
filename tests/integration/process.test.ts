@@ -3,7 +3,7 @@
 //   processing, and that SIGTERM releases every resource (exit code 0 without forcing).
 // Caller: Node integration runner.
 // Dependencies: Compiled entrypoints in .test-build/src, Supertest, isolated PostgreSQL/Redis,
-//   actor fixtures, system queue.
+//   actor fixtures, outbox repository.
 // Main Functions: API process (configuration, scheduler absence, production request logging)
 //   and worker process cases.
 // Side Effects: Starts child processes on port 3101 (API) and against the test services;
@@ -17,7 +17,7 @@ import os from 'node:os'
 import path from 'node:path'
 import supertest = require('supertest')
 import { setupIntegration, actor, db, waitFor } from '../support/integration'
-import systemQueue from '../../src/jobs/queues/system.queue'
+import outboxRepository from '../../src/modules/outbox/outbox.repository'
 import { hashToken } from '../../src/utils/token'
 
 setupIntegration()
@@ -186,7 +186,7 @@ test('api process (production): ENABLELOG=false logs no requests; ENABLELOG=true
   }
 })
 
-test('worker process: production logs are JSON on stdout, it owns the schedules, processes jobs and exits 0 on SIGTERM', async () => {
+test('worker process: production logs are JSON on stdout, it owns the schedules, relays outbox intents, processes jobs and exits 0 on SIGTERM', async () => {
   const dir = workspace()
   let worker: Child | undefined
   try {
@@ -197,7 +197,7 @@ test('worker process: production logs are JSON on stdout, it owns the schedules,
     await waitFor(
       () =>
         jsonLines(worker!.output()).some(
-          (line) => line.message === 'Started 2 workers and 1 schedules',
+          (line) => line.message === 'Started 2 workers and 2 schedules',
         ),
       15_000,
     )
@@ -206,8 +206,12 @@ test('worker process: production logs are JSON on stdout, it owns the schedules,
     await db.refreshToken.create({
       data: { token: hashToken('expired'), userId: user.id, expiresAt: new Date(0) },
     })
-    await systemQueue.add('cleanupExpiredTokens', {})
+    // An intent committed by any process is published by this worker's relay and processed.
+    await db.$transaction((tx) =>
+      outboxRepository.enqueue(tx, 'system', 'cleanupExpiredTokens', {}),
+    )
     await waitFor(async () => (await db.refreshToken.count()) === 0, 10_000)
+    assert.equal((await db.outbox.findFirstOrThrow()).status, 'PUBLISHED')
 
     assert.deepEqual(await terminate(worker), { code: 0, signal: null })
     const lines = jsonLines(worker.output())

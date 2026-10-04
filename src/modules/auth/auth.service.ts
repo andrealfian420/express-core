@@ -1,13 +1,14 @@
 // Purpose: Authentication business logic: registration with email verification, login,
 //   refresh-token rotation, logout, email verification and password reset.
 // Caller: auth.controller; integration tests.
-// Dependencies: auth.repository, user.repository, Prisma transactions, bcrypt, token/JWT
-//   utils, cache.service, email queue (BullMQ), logger, config/env (token lifetimes, bcrypt cost).
+// Dependencies: auth.repository, user.repository, outbox.repository, Prisma transactions,
+//   bcrypt, token/JWT utils, cache.service, logger, config/env (token lifetimes, bcrypt cost).
 // Main Functions: register, login, refreshAccessToken, logout, verifyEmail,
 //   requestPasswordReset, resetPassword.
-// Side Effects: Writes users and refresh/verification/reset tokens; enqueues verification
-//   emails after commit (the verification token travels only in the job payload, never in
-//   the HTTP response); invalidates cached profiles.
+// Side Effects: Writes users and refresh/verification/reset tokens; records verification,
+//   verified-notice and password-reset email intents in the outbox inside the same
+//   transaction (tokens travel only in the job payload, never in HTTP responses; nothing
+//   touches Redis on these request paths); invalidates cached profiles.
 import bcrypt from 'bcryptjs'
 import authRepository from './auth.repository'
 import { generateToken, hashToken } from '../../utils/token'
@@ -15,7 +16,8 @@ import { Prisma } from '@prisma/client'
 import prisma from '../../config/database'
 import AppError from '../../utils/appError'
 import { generateAccessToken } from '../../utils/jwt'
-import { emailQueue } from '../../jobs'
+import outboxRepository from '../outbox/outbox.repository'
+import { EMAIL_JOBS, QUEUE_NAMES } from '../../jobs/config/queue.constants'
 import logger from '../../config/logger'
 import { makeUniqueSlug } from '../../utils/sluggable'
 import userRepository from '../user/user.repository'
@@ -89,15 +91,14 @@ class AuthService {
         tx,
       )
 
-      // The token stays internal: it is needed for the email job, never for the response.
-      return { user: safeUserData, token }
-    })
+      // The token stays internal: only the email intent carries it, never the response.
+      await outboxRepository.enqueue(tx, QUEUE_NAMES.EMAIL, EMAIL_JOBS.VERIFICATION, {
+        email: user.email,
+        name: user.name,
+        token,
+      })
 
-    // Add email sending job to the queue AFTER transaction succeeds
-    await emailQueue.add('sendVerificationEmail', {
-      email: result.user.email,
-      name: result.user.name,
-      token: result.token,
+      return { user: safeUserData }
     })
 
     logger.info(`New user registered: ${result.user.email}`)
@@ -208,7 +209,7 @@ class AuthService {
         throw new AppError('Token expired', 400)
       }
 
-      await tx.user.update({
+      const updatedUser = await tx.user.update({
         where: {
           id: record.userId,
         },
@@ -223,19 +224,14 @@ class AuthService {
         },
       })
 
-      const updatedUser = await tx.user.findUnique({
-        where: {
-          id: record.userId,
-        },
-      })
+      await outboxRepository.enqueue(
+        tx,
+        QUEUE_NAMES.EMAIL,
+        EMAIL_JOBS.VERIFICATION_SUCCESS,
+        { email: updatedUser.email, name: updatedUser.name },
+      )
 
       return updatedUser
-    })
-
-    // Send success email verification notification AFTER transaction succeeds
-    await emailQueue.add('sendVerificationSuccessEmail', {
-      email: user.email,
-      name: user.name,
     })
 
     logger.info(`Email verified successfully for user: ${user.email}`)
@@ -250,19 +246,28 @@ class AuthService {
 
     const token = generateToken()
 
-    await prisma.passwordResetToken.create({
-      data: {
-        token: token,
-        userId: user.id,
-        expiresAt: new Date(
-          Date.now() + PASSWORD_RESET_EXPIRES_MINUTES * 60000,
-        ),
-      },
+    // One transaction: only the newest link stays valid, and the email intent exists
+    // exactly when the token does.
+    await prisma.$transaction(async (tx: PrismaTx) => {
+      await authRepository.deleteUnusedPasswordResetTokens(user.id, tx)
+      await authRepository.createPasswordResetToken(
+        {
+          token,
+          userId: user.id,
+          expiresAt: new Date(
+            Date.now() + PASSWORD_RESET_EXPIRES_MINUTES * 60000,
+          ),
+        },
+        tx,
+      )
+      await outboxRepository.enqueue(tx, QUEUE_NAMES.EMAIL, EMAIL_JOBS.RESET_PASSWORD, {
+        email: user.email,
+        name: user.name,
+        token,
+      })
     })
 
-    // TODO: Send password reset email with the token
-
-    logger.info(`Password reset token created for user: ${user.email}`)
+    logger.info(`Password reset requested for user: ${user.email}`)
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {

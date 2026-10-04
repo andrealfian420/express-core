@@ -9,6 +9,7 @@
     "start:worker": "node dist/jobs/run-workers.js",
     "lint": "eslint . --ext .js,.ts",
     "seed": "tsc && node prisma/seed.js",
+    "dlq:redrive": "node dist/scripts/redrive-dlq.js",
     "test": "node scripts/test-runner.cjs unit",
     "test:unit": "node scripts/test-runner.cjs unit",
     "test:integration": "node scripts/test-runner.cjs integration",

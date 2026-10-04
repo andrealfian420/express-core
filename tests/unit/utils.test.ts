@@ -1,5 +1,5 @@
-// Purpose: Verify token, JWT, slug, link, user serialization and pagination contracts
-//   without infrastructure.
+// Purpose: Verify token, JWT, slug, link, timeout, user serialization and pagination
+//   contracts without infrastructure.
 // Caller: Node unit runner.
 // Dependencies: Pure utility modules, user serializer, jsonwebtoken, an in-memory Prisma
 //   delegate double.
@@ -12,7 +12,8 @@ import { hashToken, generateToken } from '../../src/utils/token'
 import { generateAccessToken } from '../../src/utils/jwt'
 import { makeUniqueSlug, toSlug } from '../../src/utils/sluggable'
 import { paginate } from '../../src/utils/paginator'
-import { appUrl } from '../../src/utils/url'
+import { appUrl, withQuery } from '../../src/utils/url'
+import { TimeoutError, withTimeout } from '../../src/utils/timeout'
 import { toUserResponse } from '../../src/modules/user/user.serializer'
 
 test('token: random hex token and deterministic SHA-256 hash', () => {
@@ -58,6 +59,27 @@ test('url: links join APP_URL and the path without appending PORT, and encode th
     appUrl('/reset', { token: 'a b&c=d' }, 'https://api.example.invalid:8443/'),
     'https://api.example.invalid:8443/reset?token=a+b%26c%3Dd',
   )
+})
+
+test('url: reset links keep the configured page path, existing query and fragment', () => {
+  assert.equal(
+    withQuery('https://app.example.invalid/auth/reset?lang=id#form', { token: 'a/b' }),
+    'https://app.example.invalid/auth/reset?lang=id&token=a%2Fb#form',
+  )
+  assert.equal(
+    withQuery('http://test.invalid/reset-password?token=old', { token: 'new' }),
+    'http://test.invalid/reset-password?token=new',
+  )
+})
+
+test('timeout: resolves in time, rejects with TimeoutError when the operation hangs', async () => {
+  assert.equal(await withTimeout(Promise.resolve('ok'), 50), 'ok')
+  await assert.rejects(
+    withTimeout(new Promise(() => {}), 10, 'Publish timed out'),
+    (error: unknown) =>
+      error instanceof TimeoutError && error.message === 'Publish timed out',
+  )
+  await assert.rejects(withTimeout(Promise.reject(new Error('boom')), 50), /boom/)
 })
 
 test('user serializer: only allowlisted public fields leave the API', () => {

@@ -14,6 +14,11 @@ export type { EmailJobData }
 const emailWorker = new Worker<EmailJobData>(QUEUE_NAMES.EMAIL, processEmailJob, {
   connection: redis,
   concurrency: 5, // Process up to 5 jobs concurrently
+  // A slow SMTP exchange must not lose its lock; a worker that dies mid-send has its job
+  // re-run once (the sent marker suppresses a duplicate if the send had completed).
+  lockDuration: 60_000,
+  stalledInterval: 30_000,
+  maxStalledCount: 1,
 })
 
 export default emailWorker

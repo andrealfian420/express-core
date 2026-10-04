@@ -77,6 +77,8 @@ function configure() {
   process.env.ALLOWED_ORIGINS = 'http://test.invalid'
   process.env.APP_NAME = 'Express Core Test'
   process.env.APP_URL = 'http://test.invalid'
+  process.env.PASSWORD_RESET_URL = 'http://test.invalid/reset-password'
+  process.env.OUTBOX_RELAY_INTERVAL_MS = '100'
   process.env.PORT = '3001'
   process.env.SMTP_HOST = '127.0.0.1'
   process.env.SMTP_PORT = '1'

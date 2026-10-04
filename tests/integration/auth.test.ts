@@ -1,19 +1,29 @@
-// Purpose: Exercise authentication transactions and token lifecycles against real persistence.
+// Purpose: Exercise authentication transactions and token lifecycles against real persistence,
+//   including the email intents they record in the transactional outbox.
 // Caller: Node integration runner.
-// Dependencies: Auth service, Prisma, isolated Redis/BullMQ email queue, actor fixtures.
-// Main Functions: Registration/verification (token carried by the email job), login,
-//   sequential refresh rotation, logout and password-reset lifecycle cases.
-// Side Effects: Writes isolated identity, token and queue records.
+// Dependencies: Auth service, outbox repository, Prisma, isolated Redis/BullMQ email queue,
+//   actor fixtures.
+// Main Functions: Registration/verification/reset intents (atomic with the business write,
+//   no Redis on the request path), login, sequential refresh rotation, logout and
+//   password-reset lifecycle cases.
+// Side Effects: Writes isolated identity, token and outbox records.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { setupIntegration, actor, db, password } from '../support/integration'
 import auth from '../../src/modules/auth/auth.service'
+import outboxRepository from '../../src/modules/outbox/outbox.repository'
 import emailQueue from '../../src/jobs/queues/email.queue'
 import { hashToken } from '../../src/utils/token'
 
 setupIntegration()
 
-test('auth: registration hashes the password, stores a verification token and queues the email with it', async () => {
+const intents = () =>
+  db.outbox.findMany({
+    orderBy: { id: 'asc' },
+    select: { queueName: true, jobName: true, payload: true, status: true },
+  })
+
+test('auth: registration stores the user, its verification token and the email intent in one transaction', async () => {
   const email = 'register@example.invalid'
   const result = await auth.register({ name: 'Registered User', email, password })
   assert.deepEqual(Object.keys(result), ['user'])
@@ -26,17 +36,55 @@ test('auth: registration hashes the password, stores a verification token and qu
   const verification = await db.emailVerificationToken.findFirstOrThrow({
     where: { userId: user.id },
   })
-  const jobs = await emailQueue.getWaiting()
-  // Regression: the job used to carry `token: undefined` because the transaction dropped it.
-  assert.deepEqual(
-    jobs.map((j) => [j.name, j.data.email, j.data.token]),
-    [['sendVerificationEmail', email, verification.token]],
-  )
+  // Regression (T2): the email payload carries the stored token. Since T4 it is an outbox
+  // intent; nothing reaches Redis on the request path.
+  assert.deepEqual(await intents(), [
+    {
+      queueName: 'email',
+      jobName: 'sendVerificationEmail',
+      payload: { email, name: 'Registered User', token: verification.token },
+      status: 'PENDING',
+    },
+  ])
+  assert.equal(await emailQueue.count(), 0)
   await assert.rejects(
     () => auth.register({ name: 'Duplicate', email, password }),
     /already in use/,
   )
   assert.equal(await db.user.count({ where: { email } }), 1)
+})
+
+test('auth: registration succeeds and keeps its email intent while Redis rejects every command', async (t) => {
+  // Regression: registration used to commit the user and then fail on the direct enqueue,
+  // leaving an account whose verification email could never be sent.
+  t.mock.method(emailQueue, 'add', async () => {
+    throw new Error('Redis unavailable')
+  })
+  const result = await auth.register({ name: 'Offline', email: 'offline@example.invalid', password })
+  assert.equal(result.user.email, 'offline@example.invalid')
+  assert.deepEqual(
+    (await intents()).map((intent) => [intent.jobName, intent.status]),
+    [['sendVerificationEmail', 'PENDING']],
+  )
+})
+
+test('auth: a failed intent write rolls back the registration and a failed business write leaves no intent', async (t) => {
+  const enqueue = t.mock.method(outboxRepository, 'enqueue', async () => {
+    throw new Error('Injected outbox failure')
+  })
+  await assert.rejects(
+    () => auth.register({ name: 'Rolled Back', email: 'rollback@example.invalid', password }),
+    /Injected outbox failure/,
+  )
+  enqueue.mock.restore()
+  assert.equal(await db.user.count(), 0)
+  assert.equal(await db.emailVerificationToken.count(), 0)
+
+  const { user } = await actor()
+  await assert.rejects(() =>
+    auth.register({ name: 'Duplicate', email: user.email!, password }),
+  )
+  assert.equal(await db.outbox.count(), 0)
 })
 
 test('auth: unverified accounts cannot sign in; verification activates the account once', async () => {
@@ -50,8 +98,10 @@ test('auth: unverified accounts cannot sign in; verification activates the accou
   assert.equal(user.isEmailVerified, true)
   assert.equal(await db.emailVerificationToken.count(), 0)
   await assert.rejects(() => auth.verifyEmail(record.token), /Invalid token/)
-  const names = (await emailQueue.getWaiting()).map((j) => j.name).sort()
-  assert.deepEqual(names, ['sendVerificationEmail', 'sendVerificationSuccessEmail'])
+  assert.deepEqual(
+    (await intents()).map((intent) => intent.jobName),
+    ['sendVerificationEmail', 'sendVerificationSuccessEmail'],
+  )
   const tokens = await auth.login(email, password)
   assert.ok(tokens.accessToken)
 })
@@ -95,10 +145,31 @@ test('auth: expired refresh token is rejected', async () => {
   await assert.rejects(() => auth.refreshAccessToken('expired-refresh'), /expired/)
 })
 
-test('auth: password reset is single-use, expires and revokes refresh sessions', async () => {
+test('auth: a reset request records the email intent and only the newest token stays valid', async () => {
   const { user } = await actor()
   await auth.requestPasswordReset('missing@example.invalid')
   assert.equal(await db.passwordResetToken.count(), 0)
+  assert.equal(await db.outbox.count(), 0)
+
+  await auth.requestPasswordReset(user.email!)
+  const first = await db.passwordResetToken.findFirstOrThrow({ where: { userId: user.id } })
+  await auth.requestPasswordReset(user.email!)
+  const tokens = await db.passwordResetToken.findMany({ where: { userId: user.id } })
+  assert.equal(tokens.length, 1)
+  assert.notEqual(tokens[0].token, first.token)
+  await assert.rejects(() => auth.resetPassword(first.token, 'Changed2!'), /Invalid token/)
+  assert.deepEqual(
+    (await intents()).map((intent) => [intent.jobName, (intent.payload as any).token]),
+    [
+      ['sendResetPasswordEmail', first.token],
+      ['sendResetPasswordEmail', tokens[0].token],
+    ],
+  )
+  assert.equal(await emailQueue.count(), 0)
+})
+
+test('auth: password reset is single-use, expires and revokes refresh sessions', async () => {
+  const { user } = await actor()
   await auth.login(user.email!, password)
   await auth.requestPasswordReset(user.email!)
   const record = await db.passwordResetToken.findFirstOrThrow({ where: { userId: user.id } })

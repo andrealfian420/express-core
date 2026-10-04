@@ -1,3 +1,9 @@
+// Purpose: Prisma data model and datasource for Express Core (PostgreSQL).
+// Caller: Prisma Client generation, `prisma migrate`, seed and maintenance scripts.
+// Dependencies: DATABASE_URL.
+// Main Functions: Role, User, RefreshToken, EmailVerificationToken, PasswordResetToken,
+//   ActivityLog, Outbox and DeadLetterJob models.
+// Side Effects: None by itself; prisma/migrations applies the matching schema changes.
 generator client {
   provider = "prisma-client-js"
 }
@@ -100,4 +106,54 @@ model ActivityLog {
 
   @@index([userId])
   @@map("activity_logs")
+}
+
+// Lifecycle of a transactional-outbox row (see model Outbox).
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+// Transactional outbox: an enqueue intent written in the same transaction as the business
+// change, so a rollback removes it and a Redis outage cannot lose it. The worker's relay claims
+// due PENDING rows (lease via available_at + FOR UPDATE SKIP LOCKED), publishes each to BullMQ
+// with jobId `outbox-<id>`, then marks it PUBLISHED (payload cleared) or FAILED (copied to
+// dead_letter_jobs in the same transaction). available_at is the next claim time for PENDING
+// rows and the time a row became terminal otherwise, so claims and retention share one index.
+model Outbox {
+  id          BigInt       @id @default(autoincrement())
+  queueName   String       @map("queue_name")
+  jobName     String       @map("job_name")
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  availableAt DateTime     @default(now()) @map("available_at")
+  publishedAt DateTime?    @map("published_at")
+  lastError   String?      @map("last_error")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  @@index([status, availableAt])
+  @@map("outbox")
+}
+
+// Jobs that failed permanently in a worker or could not be published by the relay. Kept for
+// diagnosis and at most one audited re-drive (redriven_* columns); pruned by retention.
+// Payloads can hold short-lived tokens: no HTTP endpoint exposes this table.
+model DeadLetterJob {
+  id              BigInt    @id @default(autoincrement())
+  queueName       String    @map("queue_name")
+  jobName         String    @map("job_name")
+  jobId           String?   @map("job_id")
+  payload         Json
+  failedReason    String    @map("failed_reason")
+  attemptsMade    Int       @map("attempts_made")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  redrivenAt      DateTime? @map("redriven_at")
+  redrivenBy      String?   @map("redriven_by")
+  redriveOutboxId BigInt?   @map("redrive_outbox_id")
+
+  @@index([createdAt])
+  @@map("dead_letter_jobs")
 }

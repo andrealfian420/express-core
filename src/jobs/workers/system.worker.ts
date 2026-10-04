@@ -1,28 +1,16 @@
-import { Worker, Job } from 'bullmq'
+// Purpose: BullMQ worker for the system (maintenance) queue.
+// Caller: jobs/workers/index.ts (started by run-workers.ts in the worker process).
+// Dependencies: BullMQ, shared Redis connection, system.processor, queue constants.
+// Main Functions: systemWorker (default export).
+// Side Effects: Consumes system jobs from Redis as soon as it is imported.
+import { Worker } from 'bullmq'
 import redis from '../../config/redis'
-import AppError from '../../utils/appError'
 import { QUEUE_NAMES } from '../config/queue.constants'
-import systemService from '../../services/system.service'
+import { processSystemJob } from './system.processor'
 
-export interface SystemJobData {
-  // Define the structure of your system job data here
-}
-
-const systemWorker = new Worker(
-  QUEUE_NAMES.SYSTEM,
-  async (job: Job<SystemJobData>) => {
-    switch (job.name) {
-      case 'cleanupExpiredTokens':
-        await systemService.cleanupExpiredTokens()
-        break
-      default:
-        throw new AppError(`Unknown job name: ${job.name}`, 500)
-    }
-  },
-  {
-    connection: redis,
-    concurrency: 10, // Process up to 10 jobs concurrently
-  },
-)
+const systemWorker = new Worker(QUEUE_NAMES.SYSTEM, processSystemJob, {
+  connection: redis,
+  concurrency: 10, // Process up to 10 jobs concurrently
+})
 
 export default systemWorker

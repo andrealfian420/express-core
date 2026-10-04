@@ -3,8 +3,9 @@
 // Caller: auth.service, profile.service.
 // Dependencies: Prisma client (optionally a transaction client).
 // Main Functions: findUserByEmail, createUser, createRefreshToken, findRefreshToken,
-//   deleteRefreshToken, createEmailVerificationToken, findUniqueToken,
-//   deletePasswordResetToken, updatePasswordResetToken, deleteRefreshTokensByUserId.
+//   deleteRefreshToken, createEmailVerificationToken, createPasswordResetToken,
+//   deleteUnusedPasswordResetTokens, findUniqueToken, deletePasswordResetToken,
+//   updatePasswordResetToken, deleteRefreshTokensByUserId.
 // Side Effects: Reads and writes users, refresh_tokens, email_verification_tokens and
 //   password_reset_tokens.
 import prisma from '../../config/database'
@@ -83,6 +84,28 @@ class AuthRepository {
     const db = txOrPrisma || prisma
     return await db.emailVerificationToken.create({
       data: tokenData,
+    })
+  }
+
+  async createPasswordResetToken(
+    tokenData: Prisma.PasswordResetTokenUncheckedCreateInput,
+    txOrPrisma: PrismaTx | null = null,
+  ): Promise<PasswordResetToken> {
+    const db = txOrPrisma || prisma
+    return await db.passwordResetToken.create({
+      data: tokenData,
+    })
+  }
+
+  // Earlier unused reset links stop working once a new one is issued; used tokens stay
+  // until the expiry cleanup removes them.
+  async deleteUnusedPasswordResetTokens(
+    userId: number,
+    txOrPrisma: PrismaTx | null = null,
+  ): Promise<Prisma.BatchPayload> {
+    const db = txOrPrisma || prisma
+    return await db.passwordResetToken.deleteMany({
+      where: { userId, usedAt: null },
     })
   }
 

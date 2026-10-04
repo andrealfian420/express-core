@@ -130,11 +130,27 @@ const schema = z
     EMAIL_VERIFICATION_EXPIRES_HOURS: integer(24, 1, 8760),
     PASSWORD_RESET_EXPIRES_MINUTES: integer(60, 1, 10080),
     BCRYPT_ROUNDS: integer(10, 4, 31),
+    // Client page that receives ?token=… from the password-reset email.
+    PASSWORD_RESET_URL: required()
+      .pipe(z.string().trim())
+      .refine(isHttpUrl, 'must be an absolute http(s) URL'),
+    MAIL_DRIVER: z.preprocess(
+      blankToUndefined,
+      z.enum(['smtp'], { error: 'must be smtp' }).default('smtp'),
+    ),
     SMTP_HOST: text(),
     SMTP_PORT: integer(587, 1, 65535),
     SMTP_USER: text(),
     SMTP_PASS: secret(),
     SMTP_FROM: text(),
+    // Transactional outbox relay (worker process) and retention of terminal rows.
+    OUTBOX_RELAY_INTERVAL_MS: integer(2000, 100, 60_000),
+    OUTBOX_RELAY_BATCH: integer(50, 1, 500),
+    OUTBOX_LEASE_SECONDS: integer(60, 10, 3600),
+    OUTBOX_MAX_PUBLISH_ATTEMPTS: integer(5, 1, 50),
+    OUTBOX_RETENTION_PUBLISHED_DAYS: integer(7, 1, 3650),
+    OUTBOX_RETENTION_FAILED_DAYS: integer(30, 1, 3650),
+    DLQ_RETENTION_DAYS: integer(90, 1, 3650),
   })
   .superRefine((config, ctx) => {
     if (config.NODE_ENV !== 'production') return

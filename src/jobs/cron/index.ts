@@ -1,15 +1,17 @@
 // Purpose: Register node-cron schedules that enqueue maintenance jobs on the system queue.
 // Caller: src/jobs/run-workers.ts only — the worker process is the single scheduler owner; the
 //   API process never imports this module (it may run as several cluster instances).
-// Dependencies: node-cron, system queue (BullMQ), logger.
+// Dependencies: node-cron, system queue (BullMQ), queue constants, logger.
 // Main Functions: startCronJobs (default export), enqueueScheduled, scheduledJobOptions,
 //   slotKey, SCHEDULES.
-// Side Effects: Starts cron timers in the calling process; each tick adds jobs to Redis.
+// Side Effects: Starts cron timers in the calling process; each tick adds jobs to Redis
+//   (hourly token cleanup; daily outbox and dead-letter retention at midnight server time).
 // Notes: Every enqueue uses a deterministic time-slot jobId (UTC), and the slot's job is kept
 //   (completed or failed) for two slot lengths, so a duplicate enqueue in the same slot — a
 //   second worker or a re-fired tick — collapses onto the existing job instead of running again.
 import cron, { ScheduledTask } from 'node-cron'
 import systemQueue from '../queues/system.queue'
+import { SYSTEM_JOBS } from '../config/queue.constants'
 import logger from '../../config/logger'
 
 export type SlotUnit = 'hour' | 'day'
@@ -21,7 +23,16 @@ export interface Schedule {
 }
 
 export const SCHEDULES: Schedule[] = [
-  { expression: '0 * * * *', unit: 'hour', jobs: ['cleanupExpiredTokens'] },
+  {
+    expression: '0 * * * *',
+    unit: 'hour',
+    jobs: [SYSTEM_JOBS.CLEANUP_EXPIRED_TOKENS],
+  },
+  {
+    expression: '0 0 * * *',
+    unit: 'day',
+    jobs: [SYSTEM_JOBS.CLEANUP_OUTBOX, SYSTEM_JOBS.CLEANUP_DEAD_LETTER_JOBS],
+  },
 ]
 
 const SLOT_SECONDS: Record<SlotUnit, number> = { hour: 3_600, day: 86_400 }
