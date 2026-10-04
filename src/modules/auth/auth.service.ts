@@ -1,3 +1,13 @@
+// Purpose: Authentication business logic: registration with email verification, login,
+//   refresh-token rotation, logout, email verification and password reset.
+// Caller: auth.controller; integration tests.
+// Dependencies: auth.repository, user.repository, Prisma transactions, bcrypt, token/JWT
+//   utils, cache.service, email queue (BullMQ), logger.
+// Main Functions: register, login, refreshAccessToken, logout, verifyEmail,
+//   requestPasswordReset, resetPassword.
+// Side Effects: Writes users and refresh/verification/reset tokens; enqueues verification
+//   emails after commit (the verification token travels only in the job payload, never in
+//   the HTTP response); invalidates cached profiles.
 import bcrypt from 'bcryptjs'
 import authRepository from './auth.repository'
 import { generateToken, hashToken } from '../../utils/token'
@@ -68,17 +78,19 @@ class AuthService {
 
       const token = generateToken()
 
-      await tx.emailVerificationToken.create({
-        data: {
+      await authRepository.createEmailVerificationToken(
+        {
           token: token,
           userId: user.id,
           expiresAt: new Date(
             Date.now() + EMAIL_VERIFICATION_EXPIRES_HOURS * 3600000,
           ),
         },
-      })
+        tx,
+      )
 
-      return { user: safeUserData }
+      // The token stays internal: it is needed for the email job, never for the response.
+      return { user: safeUserData, token }
     })
 
     // Add email sending job to the queue AFTER transaction succeeds
@@ -90,7 +102,7 @@ class AuthService {
 
     logger.info(`New user registered: ${result.user.email}`)
 
-    return result
+    return { user: result.user }
   }
 
   async login(email: string, password: string): Promise<AuthTokens> {

@@ -37,12 +37,17 @@ user, password and database `express_core_test`, and Redis password `express_cor
 
 ## Structure and scope
 
-- `tests/unit`: environment guard, middleware (Bearer auth, validation, errors), storage
-  root, tokens/JWT/slugs/pagination and request schemas. No database or Redis imports.
-- `tests/integration`: auth transactions and token lifecycles, cache, readiness failures,
-  maintenance cleanup, audit persistence, cron enqueue and Redis rate limiting.
-- `tests/http`: access matrix (401/403/200), login/refresh/logout cookies, profile
-  ownership, user/role administration, audit records, soft delete and RBAC cache invalidation.
+- `tests/unit`: environment guard, middleware (Bearer auth, cookie-endpoint origin guard,
+  validation, errors), storage root, tokens/JWT/slugs/links/pagination, the user response
+  serializer and request schemas. No database or Redis imports.
+- `tests/integration`: auth transactions and token lifecycles, the verification email from
+  registration through a real BullMQ worker to a mocked transport and back through its link,
+  cache, readiness failures, maintenance cleanup, audit persistence, cron enqueue and Redis
+  rate limiting.
+- `tests/http`: access matrix (401/403/200), CORS rejection, the Origin/Referer matrix on
+  cookie endpoints, Bearer-only protected routes, cookie attributes, client-safe user
+  payloads, profile ownership, user/role administration, audit records, soft delete and
+  RBAC cache invalidation.
 - `tests/support`: guarded reset, the `actor()` identity fixture and the HTTP helper.
 
 Every feature, fix or behavior change must carry meaningful tests in the same change.
@@ -108,13 +113,9 @@ from a container.
 
 | Defect | Planned stage |
 | --- | --- |
-| User create/update responses include the stored password hash | T2 |
-| Registration enqueues the verification email without its token (`result.token` is undefined) | T2 |
-| Email links are built as `${APP_URL}${PORT}`, duplicating the port | T2 |
-| A foreign `Origin` rejected by CORS returns 500 instead of a 4xx | T2 |
 | Cron passes queue options as the job payload; every API process schedules cron | T3 |
 | `ENABLELOG=false` still enables HTTP log files (any non-empty string is truthy) | T3 |
-| Password-reset requests store a token but never send the email (TODO) | T4 |
+| Password-reset requests store a token but never send the email (TODO); the reset link still targets the API `POST /auth/reset-password` route instead of a client page | T4 |
 | Concurrent refreshes with one token race; the loser fails on the missing row | T5 |
 | Expired refresh/verification/reset tokens are deleted and then an error is thrown inside the same transaction, so the deletion rolls back (cron cleanup still removes them) | T5 (refresh); others noted |
 | `npm run lint` crashes ("object is not iterable"): `eslint.config.mjs` imports `@typescript-eslint/eslint-plugin` instead of `typescript-eslint`, and its legacy `configs.recommended` object cannot be spread into a flat config | Outside the plan; needs approval |

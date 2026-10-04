@@ -1,5 +1,12 @@
+// Purpose: CORS policy for the API — allowlisted browser origins with credentials.
+// Caller: app.ts (global cors middleware).
+// Dependencies: cors types, config/origins (ALLOWED_ORIGINS), AppError.
+// Main Functions: corsOptions (default export).
+// Side Effects: None; a disallowed Origin is passed to the error handler as a 403 AppError.
 import 'dotenv/config'
 import { CorsOptions } from 'cors'
+import { isAllowedOrigin } from './origins'
+import AppError from '../utils/appError'
 
 /**
  * CORS configuration options.
@@ -7,11 +14,6 @@ import { CorsOptions } from 'cors'
  * This configuration dictates which origins are allowed to access the API,
  * the permitted HTTP methods, allowed headers, and preflight caching rules.
  */
-const origins: string[] = (process.env.ALLOWED_ORIGINS || '')
-  .split(',')
-  .filter(Boolean)
-  .map((o) => o.trim())
-
 const corsOptions: CorsOptions = {
   origin: function (
     origin: string | undefined,
@@ -19,10 +21,12 @@ const corsOptions: CorsOptions = {
   ) {
     // Allow requests with no origin (like mobile apps or curl requests)
     // or requests from an explicitly allowed origin
-    if (!origin || origins.includes(origin)) {
+    if (!origin || isAllowedOrigin(origin)) {
       callback(null, true)
     } else {
-      callback(new Error('Not allowed by CORS'))
+      // Reject the request itself (not only the CORS headers) so a disallowed browser
+      // origin cannot trigger side effects; 403 because the request is refused, not broken.
+      callback(new AppError('Not allowed by CORS', 403))
     }
   },
 

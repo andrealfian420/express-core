@@ -1,8 +1,10 @@
-// Purpose: Verify token, JWT, slug, response and pagination contracts without infrastructure.
+// Purpose: Verify token, JWT, slug, link, user serialization and pagination contracts
+//   without infrastructure.
 // Caller: Node unit runner.
-// Dependencies: Pure utility modules, jsonwebtoken, an in-memory Prisma delegate double.
+// Dependencies: Pure utility modules, user serializer, jsonwebtoken, an in-memory Prisma
+//   delegate double.
 // Main Functions: Utility regression cases.
-// Side Effects: None.
+// Side Effects: Temporarily overrides APP_URL inside one test and restores it.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import jwt from 'jsonwebtoken'
@@ -10,6 +12,8 @@ import { hashToken, generateToken } from '../../src/utils/token'
 import { generateAccessToken } from '../../src/utils/jwt'
 import { makeUniqueSlug, toSlug } from '../../src/utils/sluggable'
 import { paginate } from '../../src/utils/paginator'
+import { appUrl } from '../../src/utils/url'
+import { toUserResponse } from '../../src/modules/user/user.serializer'
 
 test('token: random hex token and deterministic SHA-256 hash', () => {
   const token = generateToken()
@@ -42,6 +46,64 @@ test('slug: normalize text and resolve collisions while preserving the excluded 
   )
   assert.deepEqual(seen, ['hello-world', 'hello-world-1', 'hello-world-2'])
   assert.equal(slug, 'hello-world-2')
+})
+
+test('url: links join APP_URL and the path without appending PORT, and encode the query', () => {
+  assert.equal(
+    appUrl('/api/v1/auth/verify-email', { token: 'abc123' }),
+    'http://test.invalid/api/v1/auth/verify-email?token=abc123',
+  )
+  assert.equal(appUrl('/plain'), 'http://test.invalid/plain')
+  const original = process.env.APP_URL
+  try {
+    process.env.APP_URL = 'https://api.example.invalid:8443/'
+    assert.equal(
+      appUrl('/reset', { token: 'a b&c=d' }),
+      'https://api.example.invalid:8443/reset?token=a+b%26c%3Dd',
+    )
+  } finally {
+    process.env.APP_URL = original
+  }
+})
+
+test('user serializer: only allowlisted public fields leave the API', () => {
+  const row = {
+    id: 1,
+    name: 'User',
+    slug: 'user',
+    email: 'user@example.invalid',
+    password: '$2b$04$hash',
+    avatar: null,
+    roleId: 2,
+    isEmailVerified: true,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+    deletedAt: null,
+    twoFactorSecret: 'future-sensitive-column',
+  }
+  assert.deepEqual(toUserResponse(row), {
+    slug: 'user',
+    name: 'User',
+    email: 'user@example.invalid',
+    avatar: null,
+    isEmailVerified: true,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  })
+  assert.deepEqual(
+    toUserResponse({
+      id: 1,
+      roleId: 2,
+      slug: 'user',
+      avatarUrl: 'http://test.invalid/storage/a.png',
+      role: { title: 'Admin', access: [] },
+    }),
+    {
+      slug: 'user',
+      avatarUrl: 'http://test.invalid/storage/a.png',
+      role: { title: 'Admin', access: [] },
+    },
+  )
 })
 
 function fakeRequest(query: Record<string, string>) {

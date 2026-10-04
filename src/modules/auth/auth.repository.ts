@@ -1,5 +1,20 @@
+// Purpose: Data access for authentication: users by email, refresh tokens, email
+//   verification tokens and password-reset tokens.
+// Caller: auth.service, profile.service.
+// Dependencies: Prisma client (optionally a transaction client).
+// Main Functions: findUserByEmail, createUser, createRefreshToken, findRefreshToken,
+//   deleteRefreshToken, createEmailVerificationToken, findUniqueToken,
+//   deletePasswordResetToken, updatePasswordResetToken, deleteRefreshTokensByUserId.
+// Side Effects: Reads and writes users, refresh_tokens, email_verification_tokens and
+//   password_reset_tokens.
 import prisma from '../../config/database'
-import { PasswordResetToken, Prisma, RefreshToken, User } from '@prisma/client'
+import {
+  EmailVerificationToken,
+  PasswordResetToken,
+  Prisma,
+  RefreshToken,
+  User,
+} from '@prisma/client'
 import { PrismaTx } from '../../types/prisma'
 
 // This repository handles all database interactions related to authentication.
@@ -58,6 +73,16 @@ class AuthRepository {
       where: {
         token: token,
       },
+    })
+  }
+
+  async createEmailVerificationToken(
+    tokenData: Prisma.EmailVerificationTokenUncheckedCreateInput,
+    txOrPrisma: PrismaTx | null = null,
+  ): Promise<EmailVerificationToken> {
+    const db = txOrPrisma || prisma
+    return await db.emailVerificationToken.create({
+      data: tokenData,
     })
   }
 

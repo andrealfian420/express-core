@@ -1,8 +1,9 @@
-// Purpose: Verify login cookies, profile ownership, user/role administration and RBAC cache
-//   invalidation through the real router and persistence.
+// Purpose: Verify login cookies, profile ownership, the client-safe user response contract,
+//   user/role administration and RBAC cache invalidation through the real router and persistence.
 // Caller: Node HTTP runner.
 // Dependencies: Express app through Supertest, actor fixtures, Prisma.
-// Main Functions: Identity lifecycle, audit, soft delete and permission-cache cases.
+// Main Functions: Identity lifecycle, response field safety, audit, soft delete and
+//   permission-cache cases.
 // Side Effects: Writes isolated identity, audit and cache records.
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -10,6 +11,13 @@ import { setupIntegration, actor, db, password } from '../support/integration'
 import { api } from '../support/http'
 
 setupIntegration()
+
+// User payloads must never expose the password hash or internal identifiers.
+function assertSafeUser(payload: Record<string, unknown>) {
+  for (const field of ['password', 'id', 'roleId', 'deletedAt'])
+    assert.equal(field in payload, false, `${field} must not be returned`)
+  assert.doesNotMatch(JSON.stringify(payload), /\$2[aby]\$/)
+}
 
 test('auth/profile: cookie login, own profile, privilege fields ignored, logout and missing cookie', async () => {
   const { user, token } = await actor()
@@ -24,9 +32,13 @@ test('auth/profile: cookie login, own profile, privilege fields ignored, logout 
   assert.ok(login.body.data.accessToken)
   const profile = await api('get', '/profile', token).expect(200)
   assert.equal(profile.body.data.email, user.email)
-  await api('put', '/profile', token)
+  assert.equal(profile.body.data.slug, user.slug)
+  assertSafeUser(profile.body.data)
+  const changedProfile = await api('put', '/profile', token)
     .send({ name: 'Changed Name', roleId: 999 })
     .expect(200)
+  assertSafeUser(changedProfile.body.data)
+  assert.equal(changedProfile.body.data.name, 'Changed Name')
   const stored = await db.user.findUniqueOrThrow({ where: { id: user.id } })
   assert.equal(stored.roleId, user.roleId)
   assert.equal(stored.name, 'Changed Name')
@@ -51,6 +63,7 @@ test('profile: password change revokes refresh sessions and clears the cookie', 
   const changed = await api('put', '/profile', token)
     .send({ name: user.name, password: 'Changed2!' })
     .expect(200)
+  assertSafeUser(changed.body.data)
   assert.match(String(changed.headers['set-cookie']), /refreshToken=;/)
   assert.equal(await db.refreshToken.count({ where: { userId: user.id } }), 0)
   await api('post', '/auth/refresh')
@@ -61,7 +74,7 @@ test('profile: password change revokes refresh sessions and clears the cookie', 
     .expect(200)
 })
 
-test('role/user: create, validation, duplicate rejection, update, audit and soft delete', async () => {
+test('role/user: create, validation, duplicate rejection, safe serialization, update, audit and soft delete', async () => {
   const { token } = await actor()
   const role = (
     await api('post', '/roles', token)
@@ -81,16 +94,23 @@ test('role/user: create, validation, duplicate rejection, update, audit and soft
   await api('post', '/users', token).send({}).expect(400)
   const user = (await api('post', '/users', token).send(input).expect(201)).body
     .data
+  // Regression: create/update used to return the stored bcrypt hash.
+  assertSafeUser(user)
   assert.equal(user.slug, 'created-user')
+  assert.equal(user.isEmailVerified, true)
   await api('post', '/users', token).send(input).expect(400)
   const shown = await api('get', `/users/${user.slug}`, token).expect(200)
+  assertSafeUser(shown.body.data)
   assert.equal(shown.body.data.email, input.email)
   const updated = (
     await api('put', `/users/${user.slug}`, token)
-      .send({ name: 'Updated User', roleId: String(role.id) })
+      .send({ name: 'Updated User', roleId: String(role.id), password: 'Changed2!' })
       .expect(200)
   ).body.data
+  assertSafeUser(updated)
   assert.equal(updated.slug, 'updated-user')
+  const list = await api('get', '/users', token).expect(200)
+  assert.doesNotMatch(JSON.stringify(list.body), /password|\$2[aby]\$/)
   await api('get', '/users/missing', token).expect(404)
   await api('put', `/roles/${role.slug}`, token)
     .send({ description: 'Changed' })

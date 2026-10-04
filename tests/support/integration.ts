@@ -1,7 +1,7 @@
 // Purpose: Guard and reset disposable persistence and construct authenticated fixtures.
 // Caller: Integration and HTTP test suites.
 // Dependencies: Prisma, Redis, BullMQ queues, Node test hooks, scripts/test-environment.cjs.
-// Main Functions: setupIntegration, actor, db, password, reset, assertTestDatabase.
+// Main Functions: setupIntegration, actor, waitFor, db, password, reset, assertTestDatabase.
 // Side Effects: Truncates only the verified test database; flushes the isolated Redis;
 //   closes queues, Prisma, Redis and the logger after each test file.
 import { beforeEach, after } from 'node:test'
@@ -86,4 +86,20 @@ export async function actor(
     },
   })
   return { user, role, token: generateAccessToken({ id: user.id }) }
+}
+
+// Polls until `check` returns a truthy value or the deadline passes (bounded asynchronous wait).
+export async function waitFor<T>(
+  check: () => T | Promise<T>,
+  timeoutMs = 10_000,
+  intervalMs = 25,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const value = await check()
+    if (value) return value
+    if (Date.now() > deadline)
+      throw new Error(`Condition not met within ${timeoutMs} ms`)
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
 }

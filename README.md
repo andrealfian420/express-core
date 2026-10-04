@@ -43,12 +43,14 @@ express-core/
     ├── app.ts                  # Express app setup: middleware stack, routes, error handler
     ├── server.ts               # Entry point: HTTP server, cron jobs, graceful shutdown
     ├── config/
-    │   ├── cors.ts             # CORS allowed origins from env
+    │   ├── cors.ts             # CORS policy (disallowed origins rejected with 403)
     │   ├── database.ts         # Prisma client with soft-delete extension
     │   ├── helmet.ts           # Helmet security policy config
     │   ├── log.ts              # Morgan log format
     │   ├── logger.ts           # Winston logger (daily rotating files)
-    │   └── redis.ts            # ioredis client
+    │   ├── origins.ts          # ALLOWED_ORIGINS allowlist shared by CORS and the origin guard
+    │   ├── redis.ts            # ioredis client
+    │   └── storage.ts          # Storage root (STORAGE_ROOT) for uploads and /storage
     ├── email/
     │   ├── mailer.ts           # Nodemailer transporter
     │   └── templates/          # HTML email templates (verify, reset-password, success-verify)
@@ -61,12 +63,14 @@ express-core/
     │   │   ├── email.queue.ts  # BullMQ email queue
     │   │   └── system.queue.ts # BullMQ system queue
     │   ├── workers/
-    │   │   ├── email.worker.ts # Processes email jobs (verify, reset, success)
+    │   │   ├── email.processor.ts # Email job handler (verify, reset, success links)
+    │   │   ├── email.worker.ts    # BullMQ worker running the email processor
     │   │   └── system.worker.ts
     │   └── cron/               # node-cron scheduled tasks
     ├── middleware/
     │   ├── auth.middleware.ts       # JWT Bearer token validation
     │   ├── error.middleware.ts      # Global error handler
+    │   ├── origin-check.middleware.ts # Origin/Referer guard for cookie auth endpoints
     │   ├── rate-limit.middleware.ts # Redis-backed rate limiters
     │   ├── rbac.middleware.ts       # RBAC permission check (Redis-cached)
     │   ├── upload.middleware.ts     # Multer file upload factory
@@ -74,7 +78,7 @@ express-core/
     │   └── xss.middleware.ts        # XSS sanitizer for req.body / req.query
     ├── modules/
     │   ├── auth/           # register, login, logout, refresh, verify-email, password-reset
-    │   ├── user/           # User CRUD (auth + RBAC + avatar upload)
+    │   ├── user/           # User CRUD (auth + RBAC + avatar upload) + client-safe serializer
     │   ├── profile/        # Logged-in user profile (auth + avatar upload)
     │   ├── role/           # Role CRUD + access list (auth + RBAC)
     │   ├── activity-log/   # Audit trail viewer (auth + RBAC)
@@ -96,7 +100,8 @@ express-core/
         ├── paginator.ts    # Laravel-style Prisma paginator
         ├── response.ts     # Standardized JSON response helper
         ├── sluggable.ts    # Slug generator
-        └── token.ts        # Opaque token generator
+        ├── token.ts        # Opaque token generator
+        └── url.ts          # Absolute links under APP_URL (email links)
 ```
 
 ---
@@ -111,9 +116,9 @@ Client
         ├─ Global Middleware
         │    compression · cors · helmet · urlencoded/json · hpp · cookieParser · xss · morgan
         └─ /api/v1/
-              ├─ /auth           (auth-specific rate limiters)
+              ├─ /auth           (auth-specific rate limiters · checkOrigin on login/refresh/logout)
               │    └─ auth.route → auth.controller → auth.service → auth.repository → Prisma
-              │                                                   └─ emailQueue → BullMQ → email.worker → Nodemailer
+              │                                                   └─ emailQueue → BullMQ → email.worker → email.processor → Nodemailer
               ├─ /users          (apiRateLimiter · authMiddleware · checkPermission)
               │    └─ user.route → user.controller → user.service → user.repository → Prisma
               ├─ /profile        (apiRateLimiter · authMiddleware)
@@ -577,6 +582,16 @@ Base URL: `http://localhost:3001/api/v1`
 | POST   | `/auth/request-password-reset` |      | Send password reset email                          |
 | POST   | `/auth/reset-password`         |      | Reset password with token                          |
 
+Browser protection:
+
+- Protected routes authenticate only with `Authorization: Bearer <accessToken>`; the
+  refresh cookie is never accepted there.
+- `/auth/login`, `/auth/refresh` and `/auth/logout` (the cookie endpoints) reject requests
+  whose `Origin`, or `Referer` when `Origin` is absent, is not listed in `ALLOWED_ORIGINS`
+  (`403 Request origin not allowed`). Callers that send neither header (server-to-server,
+  mobile, curl) are accepted.
+- Any request carrying a disallowed `Origin` is rejected by CORS with `403 Not allowed by CORS`.
+
 ### Users _(auth + RBAC permission required)_
 
 | Method | Endpoint       | Permission                       | Description                          |
@@ -586,6 +601,13 @@ Base URL: `http://localhost:3001/api/v1`
 | POST   | `/users`       | `module.master-data.user.create` | Create user (supports avatar upload) |
 | PUT    | `/users/:slug` | `module.master-data.user.edit`   | Update user (supports avatar upload) |
 | DELETE | `/users/:slug` | `module.master-data.user.delete` | Soft delete user                     |
+
+User payloads returned by `POST/PUT /users`, `GET /users/:slug`, `GET/PUT /profile` and
+`POST /auth/register` contain only public fields (`slug`, `name`, `email`, `avatar`,
+`avatarUrl`, `isEmailVerified`, `createdAt`, `updatedAt` and, for the profile, `role`).
+They never include `password`, `id`, `roleId` or `deletedAt`; `slug` is the public
+identifier. The paginated `GET /users` list still returns `id` and the nested `role`
+(`id`, `title`, `slug`, `userType`).
 
 ### Profile _(auth required)_
 

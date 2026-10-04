@@ -1,6 +1,13 @@
+// Purpose: HTTP layer for the authenticated user's own profile.
+// Caller: profile.route (GET/PUT /api/v1/profile) after authMiddleware.
+// Dependencies: profile.service, response util, user.serializer.
+// Main Functions: getProfile, updateProfile.
+// Side Effects: Sends HTTP responses through toUserResponse; clears the refresh-token
+//   cookie when the password changes.
 import { Request, Response, NextFunction } from 'express'
 import profileService from './profile.service'
 import response from '../../utils/response'
+import { toUserResponse } from '../user/user.serializer'
 
 const REFRESH_TOKEN_EXPIRES_DAYS = Number(
   process.env.REFRESH_TOKEN_EXPIRES_DAYS,
@@ -14,7 +21,7 @@ class ProfileController {
   ): Promise<void> {
     try {
       const profile = await profileService.getProfile(req.user?.sub as number)
-      response(res, profile, 'Profile retrieved successfully')
+      response(res, toUserResponse(profile), 'Profile retrieved successfully')
     } catch (err) {
       next(err)
     }
@@ -42,7 +49,7 @@ class ProfileController {
         })
       }
 
-      response(res, updatedProfile, 'Profile updated successfully')
+      response(res, toUserResponse(updatedProfile), 'Profile updated successfully')
     } catch (err) {
       next(err)
     }

@@ -1,6 +1,16 @@
+// Purpose: HTTP layer for authentication: registration, login, refresh, logout, email
+//   verification and password reset.
+// Caller: auth.route (/api/v1/auth).
+// Dependencies: auth.service, response util, user.serializer.
+// Main Functions: register, login, refreshAccessToken, verifyEmail, requestPasswordReset,
+//   resetPassword, logout.
+// Side Effects: Sets and clears the HTTP-only refreshToken cookie; sends HTTP responses.
+//   The registered user is serialized with toUserResponse; tokens never appear in bodies
+//   except the short-lived access token.
 import { Request, Response, NextFunction } from 'express'
 import authService from './auth.service'
 import response from '../../utils/response'
+import { toUserResponse } from '../user/user.serializer'
 
 const refreshTokenExpiryDays = Number(
   process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7,
@@ -14,10 +24,10 @@ class AuthController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const newUser = await authService.register(req.body)
+      const result = await authService.register(req.body)
       response(
         res,
-        newUser,
+        { user: toUserResponse(result.user) },
         'User registered successfully. Please check your email to verify your account.',
         201,
       )

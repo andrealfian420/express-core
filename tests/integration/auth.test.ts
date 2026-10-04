@@ -1,8 +1,8 @@
 // Purpose: Exercise authentication transactions and token lifecycles against real persistence.
 // Caller: Node integration runner.
 // Dependencies: Auth service, Prisma, isolated Redis/BullMQ email queue, actor fixtures.
-// Main Functions: Registration/verification, login, sequential refresh rotation, logout
-//   and password-reset lifecycle cases.
+// Main Functions: Registration/verification (token carried by the email job), login,
+//   sequential refresh rotation, logout and password-reset lifecycle cases.
 // Side Effects: Writes isolated identity, token and queue records.
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -13,23 +13,24 @@ import { hashToken } from '../../src/utils/token'
 
 setupIntegration()
 
-test('auth: registration hashes the password, stores a verification token and queues the email', async () => {
+test('auth: registration hashes the password, stores a verification token and queues the email with it', async () => {
   const email = 'register@example.invalid'
   const result = await auth.register({ name: 'Registered User', email, password })
+  assert.deepEqual(Object.keys(result), ['user'])
   assert.equal((result.user as any).password, undefined)
   assert.equal(result.user.email, email)
   const user = await db.user.findFirstOrThrow({ where: { email } })
   assert.notEqual(user.password, password)
   assert.equal(user.isEmailVerified, false)
   assert.equal(user.slug, 'registered-user')
-  assert.equal(
-    await db.emailVerificationToken.count({ where: { userId: user.id } }),
-    1,
-  )
+  const verification = await db.emailVerificationToken.findFirstOrThrow({
+    where: { userId: user.id },
+  })
   const jobs = await emailQueue.getWaiting()
+  // Regression: the job used to carry `token: undefined` because the transaction dropped it.
   assert.deepEqual(
-    jobs.map((j) => [j.name, j.data.email]),
-    [['sendVerificationEmail', email]],
+    jobs.map((j) => [j.name, j.data.email, j.data.token]),
+    [['sendVerificationEmail', email, verification.token]],
   )
   await assert.rejects(
     () => auth.register({ name: 'Duplicate', email, password }),
