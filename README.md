@@ -54,7 +54,7 @@ express-core/
     │   └── storage.ts          # Storage root (STORAGE_ROOT) for uploads and /storage
     ├── email/
     │   ├── mailer.ts           # Mail transport (SMTP) + permanent/transient failure classification
-    │   └── templates/          # HTML email templates (verify, reset-password, success-verify)
+    │   └── templates/layout/   # Shared HTML layout wrapped around every email body
     ├── jobs/
     │   ├── run-workers.ts      # Worker process entry point: workers, outbox relay, cron schedules, shutdown
     │   ├── config/
@@ -85,6 +85,7 @@ express-core/
     ├── modules/
     │   ├── auth/           # register, login, logout, refresh, verify-email, password-reset
     │   ├── otp/            # Registration code (send/verify/consume) for REGISTRATION_VERIFICATION=otp
+    │   ├── email-template/ # Editable email text: catalog/defaults, render, HTML policy, editor API
     │   ├── user/           # User CRUD (auth + RBAC + avatar upload) + client-safe serializer
     │   ├── profile/        # Logged-in user profile (auth + avatar upload)
     │   ├── role/           # Role CRUD + access list (auth + RBAC)
@@ -162,6 +163,7 @@ Background Process (run-workers.ts — single instance, owns all schedules)
 | `RefreshToken`           | `token` (SHA-256), `userId`, `familyId`, `expiresAt`, `rotatedAt`                   | Kept until expiry; cascades   |
 | `EmailVerificationToken` | `token` (UUID), `userId`, `expiresAt`                                               | Cascades on user delete       |
 | `EmailOtp`               | `email` (lowercased, unique), `codeHash`, `attempts`, `expiresAt`, `verifiedAt`     | OTP registration; pruned      |
+| `EmailTemplate`          | `key` (unique), `title`, `subject`, `body` (inner HTML), `isActive`                 | Editable email text           |
 | `PasswordResetToken`     | `token` (UUID), `userId`, `expiresAt`, `usedAt`                                     | Cascades on user delete       |
 | `ActivityLog`            | `userId`, `action`, `description`, `subjectType`, `subjectId`, `oldData`, `newData` | Audit trail                   |
 | `Outbox`                 | `queueName`, `jobName`, `payload`, `status`, `attempts`, `availableAt`             | Email/job intents; pruned     |
@@ -481,6 +483,7 @@ Seeders live in [src/seeders/](src/seeders/) and run in registry order:
 | --- | --- | --- |
 | `role` | `super-admin` role holding every permission | Adds permission values it lacks (e.g. from a new module); never removes any, never changes the title or description |
 | `admin-user` | `admin@admin.com` / `password`, verified, on `super-admin` | Leaves an existing account untouched (password, name and role) |
+| `email-template` | The four editable email templates with their built-in text | Inserts missing keys only; edited templates stay as they are |
 
 Change the initial password after the first login. Run selected seeders with
 `make seeder name=role` (Docker) or `node prisma/seed.js role` (after a build); an
@@ -742,6 +745,14 @@ identifier. The paginated `GET /users` list still returns `id` and the nested `r
 | GET    | `/activity-logs/:id`          | `module.history.activity.detail` | Get activity log by ID             |
 | GET    | `/activity-logs/user/:userId` | `module.history.activity.index`  | Get logs by user ID                |
 
+### Email Templates _(auth + RBAC permission required)_
+
+| Method | Endpoint                | Permission                                 | Description                                   |
+| ------ | ----------------------- | ------------------------------------------ | --------------------------------------------- |
+| GET    | `/email-templates`      | `module.master-data.email-template.index`  | List templates (paginated, without body)      |
+| GET    | `/email-templates/:key` | `module.master-data.email-template.index`  | Template with its variables and required ones |
+| PUT    | `/email-templates/:key` | `module.master-data.email-template.edit`   | Edit `title`, `subject`, `body`, `isActive`   |
+
 ### Utils _(auth required)_
 
 | Method | Endpoint              | Description                                |
@@ -776,6 +787,16 @@ Re-drive a dead-lettered job after fixing its cause (for example SMTP credential
 ```bash
 make redrive id=42 by=alice      # or: npm run dlq:redrive -- 42 --by alice
 ```
+
+Email text comes from `email_templates` (keys `verify-email`, `email-verified`,
+`reset-password`, `registration-code`), read on every send, so an edit applies to the next
+email. A missing (not yet seeded) or inactive template falls back to the built-in text,
+which is also what `make seed` inserts. Bodies are inner HTML wrapped in the shared layout;
+`{{variables}}` are filled with HTML-escaped values (`{{app_name}}` everywhere). Saving is
+refused when the subject or body uses an unknown variable or the body drops a required one
+(`{{link}}`, `{{code}}`). The global XSS filter leaves `body` alone on that one route, which
+applies an email allowlist instead: inline styles, tables and `{{placeholder}}` links stay;
+scripts, event handlers and `javascript:` links are removed.
 
 A row can be re-driven only once (stamped with `redriven_at`, `redriven_by` and the new
 outbox id). Verification and reset emails are refused when their token is gone, expired

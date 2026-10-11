@@ -1,3 +1,9 @@
+// Purpose: Aggregate module routers under /api/v1 with health and auth ahead of the general
+//   API rate limiter.
+// Caller: src/app.ts.
+// Dependencies: Module routers, apiRateLimiter.
+// Main Functions: Express router (default export).
+// Side Effects: None directly.
 import { Request, Response, Router } from 'express'
 import { apiRateLimiter } from '../middleware/rate-limit.middleware'
 
@@ -9,6 +15,7 @@ import healthRoutes from '../modules/health/health.route'
 import roleRoutes from '../modules/role/role.route'
 import activityLogRoutes from '../modules/activity-log/activity-log.route'
 import helperRoutes from '../modules/helper/helper.route'
+import emailTemplateRoutes from '../modules/email-template/email-template.route'
 
 const router = Router()
 
@@ -27,6 +34,7 @@ router.use('/profile', profileRoutes)
 router.use('/roles', roleRoutes)
 router.use('/activity-logs', activityLogRoutes)
 router.use('/utils', helperRoutes)
+router.use('/email-templates', emailTemplateRoutes)
 
 router.get('/', (req: Request, res: Response): void => {
   res.status(404).json({ message: 'Not Found' })

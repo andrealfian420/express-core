@@ -58,6 +58,19 @@ const ACCESS_LIST: PermissionModule[] = [
           { label: 'Delete User', value: 'module.master-data.user.delete' },
         ],
       },
+      {
+        module: 'Email Template',
+        activities: [
+          {
+            label: 'Menu Email Template',
+            value: 'module.master-data.email-template.index',
+          },
+          {
+            label: 'Edit Email Template',
+            value: 'module.master-data.email-template.edit',
+          },
+        ],
+      },
     ],
   },
   {
@@ -97,6 +110,10 @@ const PERMISSIONS = {
       CREATE: 'module.master-data.user.create',
       EDIT: 'module.master-data.user.edit',
       DELETE: 'module.master-data.user.delete',
+    },
+    EMAIL_TEMPLATE: {
+      INDEX: 'module.master-data.email-template.index',
+      EDIT: 'module.master-data.email-template.edit',
     },
   },
   ACTIVITY_LOG: {

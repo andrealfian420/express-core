@@ -1,7 +1,7 @@
 <!-- Purpose: Document isolated testing commands, scope, fixture safety, CI gates and known baseline defects.
 Caller: Developers, reviewers and coding agents.
 Dependencies: Makefile, scripts/test-*.cjs, scripts/test-compose.sh, docker-compose.test.yml, CI templates, src/config/env.ts.
-Main Functions: Explain execution, structure (including outbox, relay, dead-letter, email delivery, refresh-rotation, paginator, role-cache, seed and registration OTP suites), isolation guards, reports, CI usage and troubleshooting.
+Main Functions: Explain execution, structure (including outbox, relay, dead-letter, email delivery, refresh-rotation, paginator, role-cache, seed, registration OTP and email template suites), isolation guards, reports, CI usage and troubleshooting.
 Side Effects: None; the commands described here create and remove disposable test resources only. -->
 # Automated testing
 
@@ -39,7 +39,8 @@ user, password and database `express_core_test`, and Redis password `express_cor
 
 - `tests/unit`: environment guard, configuration validation (`src/config/env.ts`), the
   graceful-shutdown sequence, HTTP request logging, mail failure classification, the sealed
-  refresh-token successor, registration OTP codes, keyed hashes and tickets, middleware (Bearer auth, cookie-endpoint origin guard, validation,
+  refresh-token successor, registration OTP codes, keyed hashes and tickets, email template
+  rendering, the editor's HTML policy, edit validation and the xss middleware field policy, middleware (Bearer auth, cookie-endpoint origin guard, validation,
   errors), storage root, tokens/JWT/slugs/links/timeouts, pagination (relational search
   paths resolved from the Prisma schema, default sort, tie-breaker), the permission catalogue
   (`ACCESS_LIST` and `PERMISSIONS` in sync), the user response serializer and request
@@ -62,13 +63,16 @@ user, password and database `express_core_test`, and Redis password `express_cor
   edits, and argument handling (`seed.test.ts`); registration OTP: keyed code storage, resend
   cooldown, the attempt limit under parallel guessing, tickets, single consumption, the
   registration window, the default role in both modes and cleanup (`otp.test.ts`, which
-  switches modes by replacing `registrationSettings.mode` per test); cache (multi-key delete, member removal),
+  switches modes by replacing `registrationSettings.mode` per test); template-driven email
+  (built-in fallback, database text, next-email edits, escaping, the template seeder:
+  `email-template.test.ts`); cache (multi-key delete, member removal),
   readiness failures, maintenance cleanup (batched refresh-token retention), audit
   persistence, cron schedules, Redis rate limiting, and the real API/worker entrypoints run
   as child processes (`process.test.ts`).
 - `tests/http`: access matrix (401/403/200), CORS rejection, the Origin/Referer matrix on
   cookie endpoints, Bearer-only protected routes, cookie attributes, parallel cookie refresh
-  and reuse, OTP routes absent in link mode and the send → verify → register flow in OTP mode, client-safe user payloads, profile ownership, user/role administration, audit
+  and reuse, OTP routes absent in link mode and the send → verify → register flow in OTP mode,
+  the email template editor (permissions, sanitized and validated edits, audit), client-safe user payloads, profile ownership, user/role administration, audit
   records, soft delete (which revokes the user's refresh sessions) and RBAC cache invalidation.
 - `tests/support`: guarded reset, the `actor()` identity fixture and the HTTP helper.
 

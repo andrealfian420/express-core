@@ -3,7 +3,7 @@
 // Dependencies: DATABASE_URL.
 // Main Functions: Role, User, RefreshToken (rotation family + sealed successor),
 //   EmailVerificationToken, EmailOtp (registration codes), PasswordResetToken, ActivityLog,
-//   Outbox and DeadLetterJob models.
+//   EmailTemplate, Outbox and DeadLetterJob models.
 // Side Effects: None by itself; prisma/migrations applies the matching schema changes.
 generator client {
   provider = "prisma-client-js"
@@ -85,6 +85,22 @@ model EmailVerificationToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("email_verification_tokens")
+}
+
+// Admin-editable transactional email text, one row per fixed key (see
+// src/modules/email-template/email-template.catalog.ts). `body` is the inner HTML only; the
+// shared layout is added at send time. Inactive or missing rows fall back to the built-in text.
+model EmailTemplate {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  title     String
+  subject   String
+  body      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("email_templates")
 }
 
 // Registration OTP (REGISTRATION_VERIFICATION=otp): one row per lowercased email. code_hash is

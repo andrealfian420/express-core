@@ -54,7 +54,6 @@ async function dispatch(job: Job<EmailJobData>): Promise<void> {
       const token = requireToken(job)
       await emailService.sendVerificationEmail(job.data.email, {
         name: job.data.name ?? '',
-        token,
         link: appUrl('/api/v1/auth/verify-email', { token }),
       })
       break
@@ -63,7 +62,6 @@ async function dispatch(job: Job<EmailJobData>): Promise<void> {
       const token = requireToken(job)
       await emailService.sendResetPasswordEmail(job.data.email, {
         name: job.data.name ?? '',
-        token,
         link: withQuery(env.PASSWORD_RESET_URL, { token }),
       })
       break
