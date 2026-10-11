@@ -150,13 +150,30 @@ const schema = z
     OTP_VERIFIED_WINDOW_MINUTES: integer(30, 1, 1440),
     MAIL_DRIVER: z.preprocess(
       blankToUndefined,
-      z.enum(['smtp'], { error: 'must be smtp' }).default('smtp'),
+      z
+        .enum(['smtp', 'zeptomail'], { error: 'must be smtp or zeptomail' })
+        .default('smtp'),
     ),
     SMTP_HOST: text(),
     SMTP_PORT: integer(587, 1, 65535),
     SMTP_USER: text(),
     SMTP_PASS: secret(),
     SMTP_FROM: text(),
+    // ZeptoMail HTTP API (MAIL_DRIVER=zeptomail). The URL selects the region's endpoint.
+    ZEPTOMAIL_KEY: secret(),
+    ZEPTOMAIL_FROM_ADDRESS: text(),
+    ZEPTOMAIL_FROM_NAME: text(),
+    ZEPTOMAIL_API_URL: z.preprocess(
+      blankToUndefined,
+      z
+        .string()
+        .trim()
+        .default('https://api.zeptomail.com/v1.1/email')
+        .refine(
+          (value) => isHttpUrl(value) && new URL(value).protocol === 'https:',
+          'must be an https URL',
+        ),
+    ),
     // Transactional outbox relay (worker process) and retention of terminal rows.
     OUTBOX_RELAY_INTERVAL_MS: integer(2000, 100, 60_000),
     OUTBOX_RELAY_BATCH: integer(50, 1, 500),

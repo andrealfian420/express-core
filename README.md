@@ -393,6 +393,11 @@ SMTP_PORT=2525
 SMTP_USER="your_smtp_user"
 SMTP_PASS="your_smtp_password"
 SMTP_FROM="App Name <noreply@example.com>"
+# MAIL_DRIVER=zeptomail sends through the ZeptoMail API instead of SMTP
+MAIL_DRIVER=smtp
+ZEPTOMAIL_KEY=
+ZEPTOMAIL_FROM_ADDRESS=
+ZEPTOMAIL_FROM_NAME=
 
 # Redis (use 127.0.0.1 for local dev, not "redis")
 REDIS_HOST=127.0.0.1
@@ -780,8 +785,15 @@ change itself, so a rollback removes the intent and a Redis outage cannot lose i
 worker's relay publishes due rows to BullMQ (job id `outbox-<id>`), retries Redis failures
 with exponential backoff, and dead-letters a row after `OUTBOX_MAX_PUBLISH_ATTEMPTS`.
 
-The email worker retries transient SMTP failures (timeouts, 4xx) and fails permanent ones
-(5xx, rejected recipients, missing mail configuration, unknown jobs) immediately. Final
+Mail goes out through SMTP (`MAIL_DRIVER=smtp`, default) or the ZeptoMail HTTP API
+(`MAIL_DRIVER=zeptomail` with `ZEPTOMAIL_KEY` and `ZEPTOMAIL_FROM_ADDRESS`; `ZEPTOMAIL_API_URL`
+selects the regional endpoint, requests time out after 15 s). The worker logs missing
+settings for the selected driver at startup.
+
+The email worker retries transient failures (SMTP timeouts and 4xx; ZeptoMail 408, 429, 5xx,
+network errors and timeouts) and fails permanent ones (SMTP 5xx, rejected recipients, other
+ZeptoMail 4xx such as a bad key or sender, missing mail configuration, unknown jobs)
+immediately. Final
 failures are copied to `dead_letter_jobs`. A Redis marker (`email:sent:<jobId>`, 24 h)
 stops retries and re-publishes of the same job from sending twice; delivery is still
 at-least-once (a crash between sending and writing the marker can repeat one email).

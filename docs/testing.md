@@ -38,13 +38,14 @@ user, password and database `express_core_test`, and Redis password `express_cor
 ## Structure and scope
 
 - `tests/unit`: environment guard, configuration validation (`src/config/env.ts`), the
-  graceful-shutdown sequence, HTTP request logging, mail failure classification, the sealed
-  refresh-token successor, registration OTP codes, keyed hashes and tickets, email template
-  rendering, the editor's HTML policy, edit validation and the xss middleware field policy, middleware (Bearer auth, cookie-endpoint origin guard, validation,
-  errors), storage root, tokens/JWT/slugs/links/timeouts, pagination (relational search
-  paths resolved from the Prisma schema, default sort, tie-breaker), the permission catalogue
-  (`ACCESS_LIST` and `PERMISSIONS` in sync), the user response serializer and request
-  schemas. No database or Redis imports.
+  graceful-shutdown sequence, HTTP request logging, mail failure classification and the
+  ZeptoMail request (mocked `fetch`), the sealed refresh-token successor, registration OTP
+  codes, keyed hashes and tickets, email template rendering, the editor's HTML policy, edit
+  validation and the xss middleware field policy, middleware (Bearer auth, cookie-endpoint
+  origin guard, validation, error envelope), storage root, tokens/JWT/slugs/links/timeouts,
+  pagination (relational search paths resolved from the Prisma schema, default sort,
+  tie-breaker), the permission catalogue (`ACCESS_LIST` and `PERMISSIONS` in sync), the user
+  response serializer and request schemas. No database or Redis imports.
 - `tests/integration`: auth transactions, token lifecycles (expired-token deletions commit)
   and the email intents they write to the outbox (atomic with the business write, independent
   of Redis); refresh rotation under concurrency (`refresh.test.ts`: parallel requests share

@@ -56,6 +56,8 @@ test('env: defaults match the previous inline fallbacks and blank values count a
   assert.equal(parsed.BCRYPT_ROUNDS, 10)
   assert.equal(parsed.SMTP_PORT, 587)
   assert.equal(parsed.MAIL_DRIVER, 'smtp')
+  assert.equal(parsed.ZEPTOMAIL_API_URL, 'https://api.zeptomail.com/v1.1/email')
+  assert.equal(parseEnv({ ...base, MAIL_DRIVER: 'zeptomail' }).MAIL_DRIVER, 'zeptomail')
   assert.equal(parsed.OUTBOX_RELAY_INTERVAL_MS, 2000)
   assert.equal(parsed.OUTBOX_RELAY_BATCH, 50)
   assert.equal(parsed.OUTBOX_LEASE_SECONDS, 60)
@@ -105,6 +107,7 @@ test('env: missing and malformed values fail fast, naming every key and no value
     REFRESH_GRACE_SECONDS: '0',
     REGISTRATION_VERIFICATION: 'sms',
     OTP_MAX_ATTEMPTS: '0',
+    ZEPTOMAIL_API_URL: 'http://api.zeptomail.com/v1.1/email',
   })
   for (const key of [
     'DATABASE_URL',
@@ -120,6 +123,7 @@ test('env: missing and malformed values fail fast, naming every key and no value
     'REFRESH_GRACE_SECONDS',
     'REGISTRATION_VERIFICATION',
     'OTP_MAX_ATTEMPTS',
+    'ZEPTOMAIL_API_URL',
   ])
     assert.match(malformed, new RegExp(`${key}: `))
   assert.doesNotMatch(malformed, /super-secret|hunter2/)

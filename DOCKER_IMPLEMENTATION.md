@@ -710,6 +710,10 @@ SMTP_PORT=2525
 SMTP_USER="your_smtp_user"
 SMTP_PASS="your_smtp_password"
 SMTP_FROM="Your App <noreply@example.com>"
+MAIL_DRIVER=smtp
+ZEPTOMAIL_KEY=
+ZEPTOMAIL_FROM_ADDRESS=
+ZEPTOMAIL_FROM_NAME=
 
 # ==============================================================================
 # Redis
@@ -1063,6 +1067,10 @@ SMTP_PORT=587
 SMTP_USER="your_user"
 SMTP_PASS="your_password"
 SMTP_FROM="Your App <noreply@example.com>"
+MAIL_DRIVER=smtp
+ZEPTOMAIL_KEY=
+ZEPTOMAIL_FROM_ADDRESS=
+ZEPTOMAIL_FROM_NAME=
 
 # Redis — generate with: node -e "console.log(require('crypto').randomBytes(128).toString('hex'))"
 REDIS_HOST=redis
