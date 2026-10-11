@@ -1,9 +1,9 @@
 // Purpose: Prisma data model and datasource for Express Core (PostgreSQL).
 // Caller: Prisma Client generation, `prisma migrate`, seed and maintenance scripts.
 // Dependencies: DATABASE_URL.
-// Main Functions: Role, User, RefreshToken (rotation family + sealed successor),
-//   EmailVerificationToken, EmailOtp (registration codes), PasswordResetToken, ActivityLog,
-//   EmailTemplate, Outbox and DeadLetterJob models.
+// Main Functions: Role, User, UserProfile (+ Gender enum), RefreshToken (rotation family +
+//   sealed successor), EmailVerificationToken, EmailOtp (registration codes),
+//   PasswordResetToken, ActivityLog, EmailTemplate, Outbox and DeadLetterJob models.
 // Side Effects: None by itself; prisma/migrations applies the matching schema changes.
 generator client {
   provider = "prisma-client-js"
@@ -49,10 +49,34 @@ model User {
   emailVerifications   EmailVerificationToken[]
   passwordResets       PasswordResetToken[]
   activityLogs         ActivityLog[]
+  profile              UserProfile?
 
   @@map("users")
   @@index([deletedAt])
   @@index([roleId])
+}
+
+enum Gender {
+  male
+  female
+  other
+  undisclosed
+}
+
+// Optional personal details, one row per user (user_id is the primary and foreign key). Written
+// only through the user's own PUT /profile, with an upsert in the same transaction.
+model UserProfile {
+  userId    Int       @id @map("user_id")
+  phone     String?
+  birthDate DateTime? @map("birth_date") @db.Date
+  gender    Gender?
+  locale    String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
 }
 
 // One row per issued refresh token (SHA-256 hash only). A rotated row is kept until it

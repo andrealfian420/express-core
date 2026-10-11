@@ -2,7 +2,7 @@
 // Caller: Imported first by src/server.ts and src/jobs/run-workers.ts; every module that
 //   needs configuration imports `env` from here instead of reading process.env.
 // Dependencies: dotenv, zod.
-// Main Functions: env (validated, frozen), parseEnv, Env.
+// Main Functions: env (validated, frozen), parseEnv, Env, canonicalLocale.
 // Side Effects: Reads `.env` from the working directory into process.env without overriding
 //   variables that the real environment already sets (skipped when NODE_ENV=test); throws at
 //   import time when the configuration is invalid. Error messages name keys, never values.
@@ -43,6 +43,15 @@ const isHttpUrl = (value: string): boolean => {
 // Browsers send `scheme://host[:port]` exactly; anything else would never match.
 const isOrigin = (value: string): boolean =>
   isHttpUrl(value) && new URL(value).origin === value
+
+// BCP 47 canonical form (en-us → en-US); null for anything that is not a language tag.
+export const canonicalLocale = (value: string): string | null => {
+  try {
+    return Intl.getCanonicalLocales(value.trim())[0] ?? null
+  } catch {
+    return null
+  }
+}
 
 const text = () => z.preprocess(blankToUndefined, z.string().trim().optional())
 const secret = () => z.preprocess(blankToUndefined, z.string().optional())
@@ -148,6 +157,15 @@ const schema = z
     OTP_RESEND_COOLDOWN_SECONDS: integer(60, 10, 3600),
     OTP_MAX_ATTEMPTS: integer(5, 1, 20),
     OTP_VERIFIED_WINDOW_MINUTES: integer(30, 1, 1440),
+    // Locales users may choose for their profile (comma-separated BCP 47 tags).
+    SUPPORTED_LOCALES: z
+      .preprocess((value) => blankToUndefined(value) ?? 'en,id', z.string())
+      .transform((list) => list.split(',').map((tag) => tag.trim()).filter(Boolean))
+      .refine(
+        (tags) => tags.length > 0 && tags.every((tag) => canonicalLocale(tag) !== null),
+        'must be comma-separated language tags such as en,id,en-US',
+      )
+      .transform((tags) => [...new Set(tags.map((tag) => canonicalLocale(tag)!))]),
     MAIL_DRIVER: z.preprocess(
       blankToUndefined,
       z

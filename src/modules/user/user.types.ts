@@ -1,4 +1,10 @@
+// Purpose: Shared user payload types for the user and profile modules.
+// Caller: user/profile repositories, services and controllers.
+// Dependencies: Prisma types, profile.fields (ProfileResponse).
+// Main Functions: UserProfileData, UserListData.
+// Side Effects: None (type declarations only).
 import { Prisma } from '@prisma/client'
+import { ProfileResponse } from '../profile/profile.fields'
 
 export type UserProfileData = Prisma.UserGetPayload<{
   select: {
@@ -19,6 +25,8 @@ export type UserProfileData = Prisma.UserGetPayload<{
   }
 }> & {
   avatarUrl?: string
+  // Extended profile details (phone, birth date, gender, locale); null when never set.
+  profile?: ProfileResponse | null
 }
 
 export type UserListData = Prisma.UserGetPayload<{

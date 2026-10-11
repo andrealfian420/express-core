@@ -1,6 +1,7 @@
 // Purpose: Business logic for admin user management (list, show, create, update, delete).
 // Caller: user.controller.
-// Dependencies: user.repository, auth.repository (session revocation), Prisma transactions,
+// Dependencies: user.repository, auth.repository (session revocation), profile.fields
+//   (detail response shape), Prisma transactions,
 //   bcrypt, sluggable, cache, rbac-cache, storage and system services, config/env
 //   (BCRYPT_ROUNDS).
 // Main Functions: getUsers, getUserBySlug, getUserByEmail, createUser, updateUser, deleteUser.
@@ -14,6 +15,7 @@ import authRepository from '../auth/auth.repository'
 import bcrypt from 'bcryptjs'
 import cacheService from '../../services/cache.service'
 import { invalidateAccess } from '../../services/rbac-cache.service'
+import { toProfileResponse } from '../profile/profile.fields'
 import { makeUniqueSlug } from '../../utils/sluggable'
 import systemService from '../../services/system.service'
 import prisma from '../../config/database'
@@ -32,11 +34,13 @@ class UserService {
   }
 
   async getUserBySlug(slug: string): Promise<UserProfileData> {
-    const user = await userRepository.find(slug)
+    const row = await userRepository.findDetail(slug)
 
-    if (!user) {
+    if (!row) {
       throw new AppError('User not found', 404)
     }
+
+    const user: UserProfileData = { ...row, profile: toProfileResponse(row.profile ?? null) }
 
     if (user.avatar) {
       user.avatarUrl = storageService.getPublicUrl(

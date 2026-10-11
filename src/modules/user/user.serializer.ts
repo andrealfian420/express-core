@@ -6,7 +6,8 @@
 // Side Effects: None.
 // Notes: An explicit allowlist rather than a denylist: the password hash, internal ids
 //   (`id`, `roleId`), `deletedAt` and any column added later never reach clients unless
-//   it is listed here on purpose. `slug` is the public identifier of a user.
+//   it is listed here on purpose. `slug` is the public identifier of a user. `profile` is the
+//   extended-details object already reduced to phone, birthDate, gender and locale.
 
 export const PUBLIC_USER_FIELDS = [
   'slug',
@@ -18,6 +19,7 @@ export const PUBLIC_USER_FIELDS = [
   'createdAt',
   'updatedAt',
   'role',
+  'profile',
 ] as const
 
 type PublicUserField = (typeof PUBLIC_USER_FIELDS)[number]

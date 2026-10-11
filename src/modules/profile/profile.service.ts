@@ -1,10 +1,12 @@
-// Purpose: Business logic for the authenticated user's own profile (read, update, password change).
+// Purpose: Business logic for the authenticated user's own profile (read, update, password
+//   change, extended details: phone, birth date, gender, locale).
 // Caller: profile.controller.
-// Dependencies: profile/user/auth repositories, cache, storage and system services, Prisma
-//   transactions, bcrypt, sluggable, config/env (BCRYPT_ROUNDS).
+// Dependencies: profile/user/auth repositories, profile.fields, cache, storage and system
+//   services, Prisma transactions, bcrypt, sluggable, config/env (BCRYPT_ROUNDS).
 // Main Functions: getProfile, updateProfile.
-// Side Effects: Updates users, revokes refresh tokens on password change, writes audit logs,
-//   deletes replaced avatars, caches profiles in Redis (15 minutes).
+// Side Effects: Updates users and upserts user_profiles in one transaction, revokes refresh
+//   tokens on password change, writes audit logs (profile detail changes by field name only,
+//   never the personal values), deletes replaced avatars, caches profiles in Redis (15 minutes).
 import AppError from '../../utils/appError'
 import profileRepository from './profile.repository'
 import storageService from '../../services/storage.service'
@@ -18,10 +20,11 @@ import authRepository from '../auth/auth.repository'
 import { UserProfileData } from '../user/user.types'
 import { PrismaTx } from '../../types/prisma'
 import { env } from '../../config/env'
+import { PROFILE_FIELDS, ProfileFields, toProfileResponse } from './profile.fields'
 
 const BCRYPT_ROUNDS = env.BCRYPT_ROUNDS
 
-export interface UpdateProfileInput {
+export interface UpdateProfileInput extends ProfileFields {
   name?: string
   email?: string
   avatar?: string
@@ -39,11 +42,13 @@ class ProfileService {
       return cachedProfile
     }
 
-    const profile = await profileRepository.getProfile(userId)
+    const row = await profileRepository.getProfile(userId)
 
-    if (!profile) {
+    if (!row) {
       throw new AppError('Profile not found', 404)
     }
+
+    const profile: UserProfileData = { ...row, profile: toProfileResponse(row.profile ?? null) }
 
     if (profile.avatar) {
       profile.avatarUrl = storageService.getPublicUrl(
@@ -102,6 +107,17 @@ class ProfileService {
         tx,
       )
 
+      // Extended details: only the fields that were sent (null clears one)
+      const details = Object.fromEntries(
+        PROFILE_FIELDS.filter((field) => data[field] !== undefined).map((field) => [
+          field,
+          data[field],
+        ]),
+      ) as ProfileFields
+      if (Object.keys(details).length > 0) {
+        await profileRepository.upsertDetails(userId, details, tx)
+      }
+
       // invalidate all existing refresh tokens for the user to force logout
       // from all devices if password is changed
       if (data.password && newPassword.length) {
@@ -123,6 +139,7 @@ class ProfileService {
           name: updated.name,
           email: updated.email,
           avatar: updated.avatar,
+          ...(Object.keys(details).length > 0 && { profileFields: Object.keys(details) }),
         },
         tx,
       )

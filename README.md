@@ -164,6 +164,7 @@ Background Process (run-workers.ts — single instance, owns all schedules)
 | `EmailVerificationToken` | `token` (UUID), `userId`, `expiresAt`                                               | Cascades on user delete       |
 | `EmailOtp`               | `email` (lowercased, unique), `codeHash`, `attempts`, `expiresAt`, `verifiedAt`     | OTP registration; pruned      |
 | `EmailTemplate`          | `key` (unique), `title`, `subject`, `body` (inner HTML), `isActive`                 | Editable email text           |
+| `UserProfile`            | `userId` (primary key), `phone`, `birthDate`, `gender`, `locale`                    | Optional; own PUT /profile    |
 | `PasswordResetToken`     | `token` (UUID), `userId`, `expiresAt`, `usedAt`                                     | Cascades on user delete       |
 | `ActivityLog`            | `userId`, `action`, `description`, `subjectType`, `subjectId`, `oldData`, `newData` | Audit trail                   |
 | `Outbox`                 | `queueName`, `jobName`, `payload`, `status`, `attempts`, `availableAt`             | Email/job intents; pruned     |
@@ -388,6 +389,8 @@ OTP_EXPIRES_MINUTES=10
 OTP_RESEND_COOLDOWN_SECONDS=60
 OTP_MAX_ATTEMPTS=5
 OTP_VERIFIED_WINDOW_MINUTES=30
+# Profile locales users may choose (BCP 47)
+SUPPORTED_LOCALES=en,id
 
 # SMTP Mail
 SMTP_HOST=sandbox.smtp.mailtrap.io
@@ -736,6 +739,20 @@ identifier. The paginated `GET /users` list still returns `id` and the nested `r
 | ------ | ---------- | ------------------------------------------------- |
 | GET    | `/profile` | Get logged-in user profile                        |
 | PUT    | `/profile` | Update profile (supports avatar upload, max 2 MB) |
+
+Profile details are optional and returned as `profile` (`null` until first set) by
+`GET /profile` and the admin `GET /users/:slug`. Only the user changes them, through
+`PUT /profile` (JSON or multipart):
+
+| Field       | Format                                                                  |
+| ----------- | ----------------------------------------------------------------------- |
+| `phone`     | International E.164 (`+628123456789`); spaces, dashes and brackets are removed |
+| `birthDate` | `YYYY-MM-DD`, from 1900-01-01 up to today                              |
+| `gender`    | `male`, `female`, `other` or `undisclosed`                             |
+| `locale`    | One of `SUPPORTED_LOCALES` (BCP 47, stored canonical, e.g. `en-US`)    |
+
+A field that is not sent stays unchanged; `null` (or an empty multipart field) clears it.
+The audit log records which detail fields changed, never their values.
 
 ### Roles _(auth + RBAC permission required)_
 

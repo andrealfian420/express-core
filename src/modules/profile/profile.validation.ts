@@ -1,4 +1,10 @@
+// Purpose: Request schema for updating the authenticated user's own profile.
+// Caller: profile.route (validate middleware, after the avatar upload).
+// Dependencies: zod, profile.fields (extended profile field schemas).
+// Main Functions: updateProfileSchema.
+// Side Effects: None.
 import { z } from 'zod'
+import { profileFieldSchemas } from './profile.fields'
 
 const updateProfileSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -17,6 +23,7 @@ const updateProfileSchema = z.object({
       )
     }, 'Password must be at least 8 characters long and include at least one uppercase letter, one number, and one special character')
     .optional(),
+  ...profileFieldSchemas,
 })
 
 export { updateProfileSchema }

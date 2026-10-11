@@ -44,7 +44,8 @@ user, password and database `express_core_test`, and Redis password `express_cor
   validation and the xss middleware field policy, middleware (Bearer auth, cookie-endpoint
   origin guard, validation, error envelope), storage root, tokens/JWT/slugs/links/timeouts,
   pagination (relational search paths resolved from the Prisma schema, default sort,
-  tie-breaker), the permission catalogue (`ACCESS_LIST` and `PERMISSIONS` in sync), the user
+  tie-breaker), the permission catalogue (`ACCESS_LIST` and `PERMISSIONS` in sync), profile
+  detail rules (normalization, clearing, per-field errors, `SUPPORTED_LOCALES`), the user
   response serializer and request schemas. No database or Redis imports.
 - `tests/integration`: auth transactions, token lifecycles (expired-token deletions commit)
   and the email intents they write to the outbox (atomic with the business write, independent
@@ -74,7 +75,9 @@ user, password and database `express_core_test`, and Redis password `express_cor
   cookie endpoints, Bearer-only protected routes, cookie attributes, parallel cookie refresh
   and reuse, OTP routes absent in link mode and the send → verify → register flow in OTP mode,
   the email template editor (permissions, sanitized and validated edits, audit), upload
-  rejections (400/413, no file left behind), client-safe user payloads, profile ownership, user/role administration, audit
+  rejections (400/413, no file left behind), profile details (set, read back, clear via JSON
+  and multipart, admin visibility without admin writes, audit privacy, one row under parallel
+  first-time updates), client-safe user payloads, profile ownership, user/role administration, audit
   records, soft delete (which revokes the user's refresh sessions) and RBAC cache invalidation.
 - `tests/support`: guarded reset, the `actor()` identity fixture and the HTTP helper.
 
