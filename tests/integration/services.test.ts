@@ -2,8 +2,8 @@
 // Caller: Node integration runner.
 // Dependencies: Cache/system services, auth repository (refresh retention), Prisma, isolated
 //   Redis, HTTP helper, actor fixtures.
-// Main Functions: Stateful shared-service regression cases, including batched refresh-token
-//   retention.
+// Main Functions: Stateful shared-service regression cases (cache multi-key delete and member
+//   removal, batched refresh-token retention).
 // Side Effects: Writes only isolated test records and cache keys.
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -29,6 +29,17 @@ test('cache: structured values, TTL, explicit invalidation and expiring member s
   await cache.sadd('members', 2, 30)
   assert.deepEqual((await cache.smembers('members')).sort(), ['1', '2'])
   assert.ok((await redis.ttl('members')) > 0)
+
+  // Several keys in one call; srem removes only the named members.
+  await cache.set('first', 1, 60)
+  await cache.set('second', 2, 60)
+  await cache.del('first', 'second', 'never-set')
+  await cache.del()
+  assert.equal(await redis.exists('first', 'second'), 0)
+  await cache.sadd('members', 3, 30)
+  assert.equal(await cache.srem('members', [1, 3, 99]), 2)
+  assert.equal(await cache.srem('members', []), 0)
+  assert.deepEqual(await cache.smembers('members'), ['2'])
 })
 
 test('health: readiness returns 503 when either dependency fails', async (t) => {

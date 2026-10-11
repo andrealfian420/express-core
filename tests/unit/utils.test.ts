@@ -1,5 +1,6 @@
 // Purpose: Verify token, JWT, slug, link, timeout, user serialization and pagination
-//   contracts without infrastructure.
+//   contracts (including relational search paths, default sorting and the tie-breaker) without
+//   infrastructure.
 // Caller: Node unit runner.
 // Dependencies: Pure utility modules, user serializer, jsonwebtoken, an in-memory Prisma
 //   delegate double.
@@ -172,7 +173,8 @@ test('paginator: clamp page size, whitelist sorting and share one filter between
   const [findArgs] = calls.findMany
   assert.equal(findArgs.take, 100)
   assert.equal(findArgs.skip, 100)
-  assert.deepEqual(findArgs.orderBy, { createdAt: 'asc' })
+  // The unique tie-breaker follows the requested direction, so pages never overlap.
+  assert.deepEqual(findArgs.orderBy, [{ createdAt: 'asc' }, { id: 'asc' }])
   assert.deepEqual(findArgs.where, calls.count[0].where)
   assert.deepEqual(findArgs.where, {
     AND: [
@@ -197,11 +199,66 @@ test('paginator: clamp page size, whitelist sorting and share one filter between
 test('paginator: defaults to newest first and reports an empty page safely', async () => {
   const { delegate, calls } = fakeDelegate(0)
   const result = await paginate(delegate, {}, fakeRequest({ page: '-4' }))
-  assert.deepEqual(calls.findMany[0].orderBy, { createdAt: 'desc' })
+  assert.deepEqual(calls.findMany[0].orderBy, [{ createdAt: 'desc' }, { id: 'desc' }])
   assert.equal(calls.findMany[0].skip, 0)
   assert.equal(calls.findMany[0].take, 15)
   assert.equal(result.meta.from, null)
   assert.equal(result.meta.to, null)
   assert.equal(result.meta.last_page, 1)
   assert.equal(result.meta.prev_page_url, null)
+})
+
+test('paginator: relational search follows the Prisma schema; default sort and tie-breaker are configurable', async () => {
+  const { delegate, calls } = fakeDelegate(1)
+  await paginate(
+    delegate,
+    {
+      modelName: 'Role',
+      searchFields: ['title', 'users.email', 'users.role.title'],
+      defaultSort: 'title',
+      defaultSortDir: 'asc',
+    },
+    fakeRequest({ search: 'ops' }),
+  )
+  const contains = { contains: 'ops', mode: 'insensitive' }
+  assert.deepEqual(calls.findMany[0].where, {
+    AND: [
+      {},
+      {
+        OR: [
+          { title: contains },
+          // to-many hops match when any related row matches; to-one hops nest directly
+          { users: { some: { email: contains } } },
+          { users: { some: { role: { title: contains } } } },
+        ],
+      },
+    ],
+  })
+  assert.deepEqual(calls.findMany[0].orderBy, [{ title: 'asc' }, { id: 'asc' }])
+
+  await paginate(
+    delegate,
+    { allowedSorts: ['id'], defaultSort: 'title', defaultSortDir: 'asc' },
+    fakeRequest({ sort_dir: 'desc' }),
+  )
+  assert.deepEqual(calls.findMany[1].orderBy, [{ title: 'desc' }, { id: 'desc' }])
+  await paginate(delegate, { allowedSorts: ['id'] }, fakeRequest({ sort_by: 'id' }))
+  assert.deepEqual(calls.findMany[2].orderBy, [{ id: 'desc' }])
+  await paginate(delegate, { tieBreaker: null }, fakeRequest({}))
+  assert.deepEqual(calls.findMany[3].orderBy, [{ createdAt: 'desc' }])
+})
+
+test('paginator: invalid relational search paths fail loudly instead of matching nothing', async () => {
+  const { delegate, calls } = fakeDelegate(1)
+  const search = (searchFields: string[], modelName?: string) =>
+    paginate(delegate, { modelName, searchFields }, fakeRequest({ search: 'x' }))
+  await assert.rejects(() => search(['role.title']), /modelName is required/)
+  await assert.rejects(() => search(['role.title'], 'Missing'), /Unknown Prisma model "Missing"/)
+  await assert.rejects(() => search(['team.title'], 'User'), /"team" is not a relation of User/)
+  await assert.rejects(() => search(['email.domain'], 'User'), /"email" is not a relation of User/)
+  await assert.rejects(() => search(['role.missing'], 'User'), /"missing" is not a String field of Role/)
+  await assert.rejects(() => search(['role.access'], 'User'), /"access" is not a String field of Role/)
+  // Without a search term nothing is resolved, so listing still works.
+  await paginate(delegate, { searchFields: ['role.title'] }, fakeRequest({}))
+  assert.equal(calls.findMany.length, 1)
 })

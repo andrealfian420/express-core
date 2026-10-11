@@ -32,7 +32,7 @@ express-core/
 ├── tsconfig.json
 ├── prisma/
 │   ├── schema.prisma           # DB models: Role, User, RefreshToken, EmailVerificationToken, PasswordResetToken, ActivityLog, Outbox, DeadLetterJob
-│   ├── seed.js                 # Seeds initial admin user & role
+│   ├── seed.js                 # Seed entrypoint → dist/scripts/seed.js (all or named seeders)
 │   └── migrations/             # Prisma SQL migration history
 ├── client/
 │   └── storage/
@@ -95,9 +95,11 @@ express-core/
     ├── routes/
     │   └── index.ts        # Route aggregator under /api/v1/
     ├── scripts/
-    │   └── redrive-dlq.ts  # Operator CLI: re-drive one dead-lettered job
+    │   ├── redrive-dlq.ts  # Operator CLI: re-drive one dead-lettered job
+    │   └── seed.ts         # Seed runner: every seeder, or only the named ones
+    ├── seeders/            # Named, rerunnable seeders (role, admin-user) + registry
     ├── services/
-    │   ├── cache.service.ts   # Redis get/set/del/sadd/smembers wrapper
+    │   ├── cache.service.ts   # Redis get/set/del(many)/sadd/smembers/srem wrapper
     │   ├── email.service.ts   # Email rendering + sendMail (verify, reset, success)
     │   ├── storage.service.ts # File deletion helper
     │   └── system.service.ts
@@ -176,6 +178,11 @@ The `checkPermission(permission)` middleware:
 5. Returns `403` if the permission is not granted
 
 Available permission keys are defined in [src/modules/role/role.permissions.ts](src/modules/role/role.permissions.ts).
+To add a module's permissions, add its group to `ACCESS_LIST` and the same values to
+`PERMISSIONS` (a unit test fails if the two drift apart), then run `make seed`: the
+super-admin role gains the new values and no other role changes. After a role edit, the
+cached access of that role's users is dropped at once; a cached entry otherwise expires
+within 5 minutes.
 
 ### Rate Limiting
 
@@ -212,9 +219,26 @@ On error:
 
 ### Pagination (Laravel-style)
 
-List endpoints support query parameters: `page`, `per_page`, `sort`, `order`, `search`.
+List endpoints accept `page`, `per_page` (1–100, default 15), `search`, `sort_by` (only
+columns the endpoint whitelists) and `sort_dir` (`asc`/`desc`).
 
-Response includes a `meta` object (total, per_page, current_page, last_page, from, to) and a `links` array (first, last, next, prev page URLs).
+The response carries `data`, a `meta` object (`total`, `per_page`, `current_page`,
+`last_page`, `from`, `to`, `path` and first/last/next/prev page URLs) and a `links` array
+with one entry per page plus previous/next.
+
+`paginate()` options for repositories ([src/utils/paginator.ts](src/utils/paginator.ts)):
+
+| Option | Purpose |
+| --- | --- |
+| `searchFields` | Columns matched case-insensitively; dot paths search relations (`role.title`, `users.email`; to-many matches any row) and need `modelName` (e.g. `'User'`) |
+| `allowedSorts` | Whitelist for `sort_by` |
+| `defaultSort`, `defaultSortDir` | Order when `sort_by` is absent or not allowed (default `createdAt`, `desc`) |
+| `tieBreaker` | Unique column appended to every ORDER BY (default `id`), so pages never repeat or skip rows |
+
+The page and the count always use the same filter. Search uses `ILIKE '%…%'`, which no
+b-tree index can serve; relational paths add a join (or a sub-select for to-many) per
+relation, so whitelist only what clients need. On large tables measure first and consider
+`pg_trgm` GIN indexes on the searched columns.
 
 ---
 
@@ -281,7 +305,8 @@ make seed
 | `make prod`    | Start production-like environment                |
 | `make build`   | Build Docker images only                         |
 | `make migrate` | Run Prisma migrations (dev mode)                 |
-| `make seed`    | Run database seeder                              |
+| `make seed`    | Run every seeder (reruns keep admin edits)       |
+| `make seeder name=role` | Run named seeders only                  |
 | `make redrive id=… by=…` | Re-drive one dead-lettered job (once)  |
 | `make logs`    | Tail all container logs                          |
 | `make shell`   | Shell into the API container                     |
@@ -438,12 +463,19 @@ npx prisma migrate deploy
 
 ## Database Seeding
 
-The seed script creates an initial **Super Administrator** role and **admin** user:
+Seeders live in [src/seeders/](src/seeders/) and run in registry order:
 
-| Field    | Value             |
-| -------- | ----------------- |
-| Email    | `admin@admin.com` |
-| Password | `password`        |
+| Seeder | Creates | On a rerun |
+| --- | --- | --- |
+| `role` | `super-admin` role holding every permission | Adds permission values it lacks (e.g. from a new module); never removes any, never changes the title or description |
+| `admin-user` | `admin@admin.com` / `password`, verified, on `super-admin` | Leaves an existing account untouched (password, name and role) |
+
+Change the initial password after the first login. Run selected seeders with
+`make seeder name=role` (Docker) or `node prisma/seed.js role` (after a build); an
+unknown name fails before anything runs and lists the valid names. New seeders implement
+`Seeder` (`src/seeders/seeder.types.ts`), must be rerunnable without overwriting
+administrator edits, and are registered in `src/seeders/index.ts` after the seeders they
+depend on.
 
 ### Development
 

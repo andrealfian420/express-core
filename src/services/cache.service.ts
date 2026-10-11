@@ -1,3 +1,9 @@
+// Purpose: Thin JSON cache over Redis so business logic never calls ioredis directly: strings
+//   (get/set/del) and sets (sadd/smembers/srem) used for RBAC/profile caching and invalidation.
+// Caller: rbac.middleware, profile/user/role/auth services, email.processor (sent marker).
+// Dependencies: ioredis singleton (src/config/redis.ts).
+// Main Functions: get, set, del, sadd, smembers, srem.
+// Side Effects: Reads, writes and deletes Redis keys.
 import redis from '../config/redis'
 
 // This service provides a simple interface for interacting with Redis, allowing you to get, set, and delete cached data.
@@ -22,9 +28,10 @@ class CacheService {
     await redis.set(key, JSON.stringify(value), 'EX', ttl)
   }
 
-  // deletes a value from Redis by key
-  async del(key: string): Promise<void> {
-    await redis.del(key)
+  // Deletes one or more keys in a single round trip; no-op without keys.
+  async del(...keys: string[]): Promise<void> {
+    if (keys.length === 0) return
+    await redis.del(...keys)
   }
 
   // sadd is a Redis command that stands for "Set Add". It is used to add a member to a set stored at a specified key in Redis.
@@ -41,6 +48,13 @@ class CacheService {
   // It returns an array of members in the set
   async smembers(key: string): Promise<string[]> {
     return await redis.smembers(key)
+  }
+
+  // Removes only the given members. Unlike del() on the whole set, members added concurrently
+  // (after the caller read the set) stay tracked. Returns the number removed; no-op when empty.
+  async srem(key: string, members: (string | number)[]): Promise<number> {
+    if (members.length === 0) return 0
+    return await redis.srem(key, ...members.map(String))
   }
 }
 

@@ -1,3 +1,11 @@
+// Purpose: Role management business logic: list, show, create, update and delete roles with
+//   permission validation, audit logging and RBAC cache invalidation.
+// Caller: role.controller.
+// Dependencies: role.repository, Prisma transactions, cache.service, role.permissions,
+//   sluggable, system.service (activity log).
+// Main Functions: getRoles, getRole, createRole, updateRole, deleteRole, _validateAccess.
+// Side Effects: Writes roles and activity logs; after commit deletes the cached RBAC/profile
+//   entries of the role's tracked users in one Redis call and untracks only those users.
 import { Request } from 'express'
 import prisma from '../../config/database'
 import { Prisma, Role } from '@prisma/client'
@@ -11,6 +19,19 @@ import { PaginatedResult } from '../../utils/paginator'
 import { PrismaTx } from '../../types/prisma'
 
 const cacheKey = (id: string | number): string => `role:${id}`
+
+// Drops the cached access (and profile, which embeds the role) of every user the RBAC
+// middleware tracked for this role. srem removes only the members read here: a user whose
+// access is cached concurrently stays tracked for the next invalidation, whereas deleting the
+// whole set would lose it until the cache entry expires.
+async function invalidateRoleUsers(roleId: number): Promise<void> {
+  const setKey = `role-users:${roleId}`
+  const userIds = await cacheService.smembers(setKey)
+  await cacheService.del(
+    ...userIds.flatMap((userId) => [`user-role:${userId}`, `profile:${userId}`]),
+  )
+  await cacheService.srem(setKey, userIds)
+}
 
 // Service layer for Role management
 class RoleService {
@@ -146,15 +167,7 @@ class RoleService {
 
     // Clear caches AFTER transaction succeeds
     await cacheService.del(cacheKey(role.slug))
-
-    // delete all user caches that have this role assigned
-    const userIds = await cacheService.smembers(`role-users:${role.id}`)
-    for (const userId of userIds) {
-      await cacheService.del(`user-role:${userId}`)
-      await cacheService.del(`profile:${userId}`) // also invalidate profile cache since it contains role info
-    }
-
-    await cacheService.del(`role-users:${role.id}`)
+    await invalidateRoleUsers(role.id)
 
     return updated
   }
@@ -199,13 +212,10 @@ class RoleService {
       )
     })
 
-    // Clear caches AFTER transaction succeeds
-    await cacheService.smembers(`role-users:${role.id}`).then((userIds) => {
-      userIds.forEach(
-        async (userId) => await cacheService.del(`user-role:${userId}`),
-      )
-    })
-    await cacheService.del(`role-users:${role.id}`)
+    // Clear caches AFTER transaction succeeds; awaited, so a Redis failure surfaces instead
+    // of becoming an unhandled rejection after the response.
+    await cacheService.del(cacheKey(role.slug))
+    await invalidateRoleUsers(role.id)
   }
 
   // Validate that all given permission values exist in ALL_PERMISSIONS

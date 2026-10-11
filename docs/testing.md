@@ -1,7 +1,7 @@
 <!-- Purpose: Document isolated testing commands, scope, fixture safety, CI gates and known baseline defects.
 Caller: Developers, reviewers and coding agents.
 Dependencies: Makefile, scripts/test-*.cjs, scripts/test-compose.sh, docker-compose.test.yml, CI templates, src/config/env.ts.
-Main Functions: Explain execution, structure (including outbox, relay, dead-letter, email delivery and refresh-rotation suites), isolation guards, reports, CI usage and troubleshooting.
+Main Functions: Explain execution, structure (including outbox, relay, dead-letter, email delivery, refresh-rotation, paginator, role-cache and seed suites), isolation guards, reports, CI usage and troubleshooting.
 Side Effects: None; the commands described here create and remove disposable test resources only. -->
 # Automated testing
 
@@ -40,8 +40,10 @@ user, password and database `express_core_test`, and Redis password `express_cor
 - `tests/unit`: environment guard, configuration validation (`src/config/env.ts`), the
   graceful-shutdown sequence, HTTP request logging, mail failure classification, the sealed
   refresh-token successor, middleware (Bearer auth, cookie-endpoint origin guard, validation,
-  errors), storage root, tokens/JWT/slugs/links/timeouts/pagination, the user response
-  serializer and request schemas. No database or Redis imports.
+  errors), storage root, tokens/JWT/slugs/links/timeouts, pagination (relational search
+  paths resolved from the Prisma schema, default sort, tie-breaker), the permission catalogue
+  (`ACCESS_LIST` and `PERMISSIONS` in sync), the user response serializer and request
+  schemas. No database or Redis imports.
 - `tests/integration`: auth transactions, token lifecycles (expired-token deletions commit)
   and the email intents they write to the outbox (atomic with the business write, independent
   of Redis); refresh rotation under concurrency (`refresh.test.ts`: parallel requests share
@@ -54,9 +56,13 @@ user, password and database `express_core_test`, and Redis password `express_cor
   bounded retention); email delivery through outbox → relay → real worker → mocked transport
   for verification and reset links, transient retries, the sent marker, permanent failures
   and dead-letter writes (`email-worker.test.ts`); the once-only re-drive and its CLI
-  (`dead-letter.test.ts`); cache, readiness failures, maintenance cleanup (batched
-  refresh-token retention), audit persistence, cron schedules, Redis rate limiting, and the
-  real API/worker entrypoints run as child processes (`process.test.ts`).
+  (`dead-letter.test.ts`); stable pages over duplicate sort values and relational search on
+  PostgreSQL (`paginator.test.ts`); RBAC cache invalidation after role changes
+  (`role-cache.test.ts`); the seed CLI on a fresh database, reruns that keep administrator
+  edits, and argument handling (`seed.test.ts`); cache (multi-key delete, member removal),
+  readiness failures, maintenance cleanup (batched refresh-token retention), audit
+  persistence, cron schedules, Redis rate limiting, and the real API/worker entrypoints run
+  as child processes (`process.test.ts`).
 - `tests/http`: access matrix (401/403/200), CORS rejection, the Origin/Referer matrix on
   cookie endpoints, Bearer-only protected routes, cookie attributes, parallel cookie refresh
   and reuse, client-safe user payloads, profile ownership, user/role administration, audit

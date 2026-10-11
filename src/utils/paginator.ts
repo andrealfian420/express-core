@@ -1,4 +1,18 @@
+// Purpose: Generic Laravel-style pagination for Prisma models: page/per_page clamping, scalar
+//   and relational search, whitelisted sorting with a configurable default, a unique tie-breaker
+//   for stable pages, and the meta/links response block.
+// Caller: Repositories (user, role, activity-log); module repositories added later.
+// Dependencies: Express Request (query string), Prisma DMMF (relation metadata for dot-notation
+//   search fields).
+// Main Functions: paginate, PaginateOptions, PaginatedResult, PrismaDelegate.
+// Side Effects: Database reads through the given delegate (findMany and count with the same
+//   filter). Relation metadata is cached per model in memory.
+// Notes: Only fields named by the caller are searched or sorted, never request-supplied names.
+//   Every ORDER BY ends with the tie-breaker (default `id`), so OFFSET pages neither repeat nor
+//   skip rows when the sort column has duplicates. Relational search adds a join or EXISTS per
+//   relation and, like scalar `contains`, cannot use a b-tree index; keep the list short.
 import { Request } from 'express'
+import { Prisma } from '@prisma/client'
 
 // Interface representing a generic Prisma model delegate
 export interface PrismaDelegate {
@@ -14,9 +28,89 @@ export interface PaginateOptions<T, R = T> {
   whereNot?: any
   select?: any
   include?: any
+  // Prisma model name of `model` (e.g. 'User'); required when searchFields use dot notation.
+  modelName?: string
+  // Scalar fields ('name') or relation paths ('role.title', 'users.email'); to-many relations
+  // match when any related row matches.
   searchFields?: string[]
   allowedSorts?: string[]
+  // Ordering when sort_by is absent or not whitelisted; sort_dir still overrides the direction.
+  defaultSort?: string
+  defaultSortDir?: 'asc' | 'desc'
+  // Unique column appended to the ordering; null only for models without one.
+  tieBreaker?: string | null
   transform?: (item: T) => R
+}
+
+type FieldMeta = { kind: string; isList: boolean; type: string }
+
+const modelFieldCache = new Map<string, Map<string, FieldMeta>>()
+
+function modelFields(modelName: string): Map<string, FieldMeta> {
+  let fields = modelFieldCache.get(modelName)
+  if (!fields) {
+    const model = Prisma.dmmf.datamodel.models.find((m) => m.name === modelName)
+    if (!model) {
+      throw new Error(`[paginator] Unknown Prisma model "${modelName}"`)
+    }
+    fields = new Map(
+      model.fields.map((f) => [f.name, { kind: f.kind, isList: f.isList, type: f.type }]),
+    )
+    modelFieldCache.set(modelName, fields)
+  }
+  return fields
+}
+
+// 'role.title' on User → { role: { title: { contains } } }; to-many hops use `some`
+// ('users.email' on Role → { users: { some: { email: { contains } } } }). Every hop must be a
+// relation and the leaf a String column, so a typo fails loudly instead of matching nothing.
+function relationalCondition(
+  modelName: string,
+  path: string,
+  search: string,
+): Record<string, unknown> {
+  const segments = path.split('.')
+  const leaf = segments.pop()!
+  const hops: FieldMeta[] = []
+  let current = modelName
+  for (const name of segments) {
+    const meta = modelFields(current).get(name)
+    if (meta?.kind !== 'object') {
+      throw new Error(`[paginator] "${name}" is not a relation of ${current} (in "${path}")`)
+    }
+    hops.push(meta)
+    current = meta.type
+  }
+  const leafMeta = modelFields(current).get(leaf)
+  if (leafMeta?.kind !== 'scalar' || leafMeta.type !== 'String') {
+    throw new Error(`[paginator] "${leaf}" is not a String field of ${current} (in "${path}")`)
+  }
+
+  let condition: Record<string, unknown> = {
+    [leaf]: { contains: search, mode: 'insensitive' },
+  }
+  for (let i = segments.length - 1; i >= 0; i--) {
+    condition = hops[i].isList
+      ? { [segments[i]]: { some: condition } }
+      : { [segments[i]]: condition }
+  }
+  return condition
+}
+
+function searchConditions(
+  fields: string[],
+  search: string,
+  modelName?: string,
+): Record<string, unknown>[] {
+  return fields.map((field) => {
+    if (!field.includes('.')) {
+      return { [field]: { contains: search, mode: 'insensitive' } }
+    }
+    if (!modelName) {
+      throw new Error(`[paginator] modelName is required for relational search field "${field}"`)
+    }
+    return relationalCondition(modelName, field, search)
+  })
 }
 
 // Interface defining the structure of the final paginated response
@@ -60,8 +154,12 @@ const paginate = async <T = any, R = T>(
     whereNot,
     select,
     include,
+    modelName,
     searchFields = [],
     allowedSorts = ['createdAt'],
+    defaultSort = 'createdAt',
+    defaultSortDir = 'desc',
+    tieBreaker = 'id',
     transform = null,
   } = options
 
@@ -78,8 +176,16 @@ const paginate = async <T = any, R = T>(
   const page = Math.max(1, parseInt(pageParam) || 1)
   const perPage = Math.min(100, Math.max(1, parseInt(perPageParam) || 15))
   const search = searchParam || null
-  const sortBy = allowedSorts.includes(sortByParam) ? sortByParam : 'createdAt'
-  const sortDir = sortDirParam === 'asc' ? 'asc' : 'desc'
+  const sortBy = allowedSorts.includes(sortByParam) ? sortByParam : defaultSort
+  const sortDir = sortDirParam
+    ? sortDirParam === 'asc'
+      ? 'asc'
+      : 'desc'
+    : defaultSortDir
+  const orderBy = [
+    { [sortBy]: sortDir },
+    ...(tieBreaker && tieBreaker !== sortBy ? [{ [tieBreaker]: sortDir }] : []),
+  ]
 
   // Merge whereNot into the base where clause
   const baseWhereWithNot = whereNot
@@ -93,9 +199,7 @@ const paginate = async <T = any, R = T>(
           AND: [
             baseWhereWithNot,
             {
-              OR: searchFields.map((field) => ({
-                [field]: { contains: search, mode: 'insensitive' },
-              })),
+              OR: searchConditions(searchFields, search, modelName),
             },
           ],
         }
@@ -108,7 +212,7 @@ const paginate = async <T = any, R = T>(
       where: finalWhere,
       ...(select ? { select } : {}),
       ...(include ? { include } : {}),
-      orderBy: { [sortBy]: sortDir },
+      orderBy,
       skip,
       take: perPage,
     }),

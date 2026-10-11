@@ -1,9 +1,14 @@
-/**
- * RBAC Permission Definitions
- *
- * ACCESS_LIST – full structured tree (used for UI/API display)
- * PERMISSIONS  – flat constant map (used in code for checkPermission())
- */
+// Purpose: RBAC permission definitions. ACCESS_LIST is the structured tree shown in the role
+//   editor; PERMISSIONS is the constant map used by checkPermission(); ALL_PERMISSIONS lists
+//   every valid value.
+// Caller: Module routes (checkPermission), role.service (_validateAccess), role.controller
+//   (access list), seeders/role.seeder (super-admin grants), test fixtures.
+// Dependencies: None.
+// Main Functions: ACCESS_LIST, PERMISSIONS, ALL_PERMISSIONS.
+// Side Effects: None.
+// Notes: Extension point for new modules: add the module's group to ACCESS_LIST and the same
+//   values to PERMISSIONS (a unit test keeps both in sync); the next seed run grants new values
+//   to super-admin without touching other roles.
 
 export interface PermissionActivity {
   label: string

@@ -1,11 +1,11 @@
 # Purpose: Developer convenience wrapper around Docker Compose commands.
 # Caller: Developers, invoked directly (e.g. `make dev`, `make test module=auth`).
 # Dependencies: docker-compose*.yml, isolated docker-compose.test.yml, scripts/test-compose.sh.
-# Main Functions: dev, prod, build, migrate, seed, redrive, logs, down, clean, shell, studio,
+# Main Functions: dev, prod, build, migrate, seed, seeder, redrive, logs, down, clean, shell, studio,
 #   test, test-unit, test-watch, test-integration, test-http, test-down.
-# Side Effects: Starts/stops Docker containers; migrate/seed write to the development DB;
+# Side Effects: Starts/stops Docker containers; migrate/seed/seeder write to the development DB;
 #   test targets use only the disposable express-core-testing Compose project.
-.PHONY: dev prod build migrate seed redrive logs down clean shell studio
+.PHONY: dev prod build migrate seed seeder redrive logs down clean shell studio
 
 # Development (full Docker with hot-reload)
 dev:
@@ -23,9 +23,15 @@ build:
 migrate:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm migrate
 
-# Run seed (builds TypeScript first since seed.js imports from dist/)
+# Run every seeder (builds TypeScript first since seed.js imports from dist/). Reruns keep
+# administrator edits: existing accounts are untouched, super-admin only gains new permissions.
 seed:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api sh -c "npx tsc && npx prisma db seed"
+
+# Run named seeders only, e.g. make seeder name=role (unknown names fail and list the valid ones)
+seeder:
+	@test -n "$(name)" || { echo "Usage: make seeder name=<seeder> (see src/seeders/index.ts)"; exit 1; }
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api sh -c "npx tsc && node prisma/seed.js $(name)"
 
 # Re-drive one dead-lettered job through the outbox (once; expired link tokens are refused).
 # Usage: make redrive id=42 by=alice   (runs inside the running worker container; the dev
