@@ -29,6 +29,9 @@ function app() {
   app.get('/teapot', () => {
     throw new AppError('Short and stout', 418)
   })
+  app.get('/upstream', () => {
+    throw new AppError('Upstream failed', 502, [{ detail: 'internal host db-1' }])
+  })
   app.use(errors)
   return supertest(app)
 }
@@ -78,6 +81,11 @@ test('validate: strips unknown fields and rejects malformed input without leakin
   assert.equal(invalid.body.success, false)
   assert.equal(invalid.body.message, 'Validation failed')
   assert.equal(invalid.body.stack, undefined)
+  // Regression: field details used to be returned only when NODE_ENV=development.
+  assert.deepEqual(invalid.body.errors, [
+    { field: 'email', message: 'Invalid email address' },
+    { field: 'password', message: 'Invalid input: expected string, received undefined' },
+  ])
 })
 
 test('error: AppError keeps its status and unknown errors become 500 outside development', async () => {
@@ -87,6 +95,9 @@ test('error: AppError keeps its status and unknown errors become 500 outside dev
   const boom = await http.get('/boom').expect(500)
   assert.equal(boom.body.success, false)
   assert.equal(boom.body.stack, undefined)
+  // Details attached to server errors stay out of responses outside development.
+  const upstream = await http.get('/upstream').expect(502)
+  assert.deepEqual(upstream.body, { success: false, message: 'Upstream failed' })
 })
 
 test('origin guard: allowlisted Origin/Referer and header-less callers pass; foreign, null and malformed values are rejected', async () => {

@@ -57,11 +57,14 @@ test('email templates: edits are sanitized, validated against the catalog and au
   )
   assert.equal(saved.body.data.subject, 'Reset at {{app_name}}')
 
-  // Field details are only returned in development; the service test checks them.
   const missing = await api('put', '/email-templates/reset-password', editor.token)
     .send({ body: '<p>No link here {{lnk}}</p>' })
     .expect(400)
   assert.equal(missing.body.message, 'Validation failed')
+  assert.deepEqual(missing.body.errors, [
+    { field: 'body', message: 'Unknown variable {{lnk}}' },
+    { field: 'body', message: 'Body must contain {{link}}' },
+  ])
   assert.match(
     (await db.emailTemplate.findUniqueOrThrow({ where: { key: 'reset-password' } })).body,
     /href="\{\{link\}\}"/,

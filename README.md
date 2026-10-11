@@ -219,10 +219,14 @@ On error:
 ```json
 {
   "success": false,
-  "message": "Error description",
-  "data": null
+  "message": "Validation failed",
+  "errors": [{ "field": "email", "message": "Invalid email address" }]
 }
 ```
+
+`errors` appears on client errors (4xx) that carry field details, in every environment.
+Server errors (5xx) return only `success` and `message`; their details and the stack are
+added only when `NODE_ENV=development`.
 
 ### Pagination (Laravel-style)
 
