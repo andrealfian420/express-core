@@ -1,12 +1,16 @@
+// Purpose: RBAC permission check for protected routes.
+// Caller: Module routes, after authMiddleware (checkPermission(PERMISSIONS....)).
+// Dependencies: rbac-cache.service (versioned Redis cache), Prisma (user + role lookup), AppError.
+// Main Functions: checkPermission (default export).
+// Side Effects: Redis read (entry + version in one call) and, on a miss, one database read and
+//   a cache write; sets req.role.
 import { Request, Response, NextFunction } from 'express'
 import AppError from '../utils/appError'
 import prisma from '../config/database'
-import cacheService from '../services/cache.service'
+import { cacheUserAccess, readUserAccess } from '../services/rbac-cache.service'
 
 // Import the interfaces from the extended Express types
 import { CachedUserData } from '../types/express'
-
-const USER_ROLE_CACHE_TTL = 300 // 5 minutes
 
 /**
  * RBAC middleware factory.
@@ -24,8 +28,9 @@ const checkPermission = (permission: string) => {
 
       const userId = Number(rawUserId)
 
-      const cacheKey = `user-role:${userId}`
-      let userData: CachedUserData | null = await cacheService.get(cacheKey)
+      // The version is read before the database so a refill can never carry newer data's stamp.
+      const { cached, version } = await readUserAccess(userId)
+      let userData: CachedUserData | null = cached
 
       if (!userData) {
         userData = (await prisma.user.findFirst({
@@ -46,16 +51,7 @@ const checkPermission = (permission: string) => {
           return next(new AppError('Unauthorized access', 401))
         }
 
-        await cacheService.set(cacheKey, userData, USER_ROLE_CACHE_TTL)
-
-        if (userData.role) {
-          // Cache the role ID for quick invalidation when role permissions change
-          await cacheService.sadd(
-            `role-users:${userData.role.id}`,
-            userId,
-            USER_ROLE_CACHE_TTL,
-          )
-        }
+        await cacheUserAccess(userId, userData, version)
       }
 
       if (!userData.role) {

@@ -1,5 +1,5 @@
 // Purpose: Verify the audited, once-only re-drive of dead-lettered jobs through the outbox, its
-//   replay guards for link emails, and the operator CLI exit codes.
+//   replay guards for link and registration-code emails, and the operator CLI exit codes.
 // Caller: Node integration runner.
 // Dependencies: Dead-letter service, compiled re-drive CLI, isolated PostgreSQL, actor fixtures.
 // Main Functions: Re-drive success/refusal/concurrency cases and CLI cases.
@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { setupIntegration, actor, db } from '../support/integration'
+import { hashOtpCode } from '../../src/modules/otp/otp.code'
 import deadLetters, {
   RedriveError,
 } from '../../src/modules/dead-letter/dead-letter.service'
@@ -92,6 +93,29 @@ test('redrive: link emails whose token is gone, expired or used are refused, as 
   await assert.rejects(() => deadLetters.redrive(unroutable.id), /Unknown queue "reports"/)
   await assert.rejects(() => deadLetters.redrive(999_999n), /not found/)
   assert.equal(await db.outbox.count(), 0)
+})
+
+test('redrive: a registration code is re-sent only while it is current, unverified and unexpired', async () => {
+  const email = 'code@example.invalid'
+  const otp = await db.emailOtp.create({
+    data: { email, codeHash: hashOtpCode(email, '111111'), expiresAt: future() },
+  })
+  const payload = (code: string) => ({ email, code, expiresMinutes: 10 })
+  const replaced = await deadLetter('sendOtpEmail', payload('222222'))
+  await assert.rejects(() => deadLetters.redrive(replaced.id), /replaced or no longer exists/)
+  const current = await deadLetter('sendOtpEmail', payload('111111'))
+  await deadLetters.redrive(current.id)
+  assert.equal(await db.outbox.count(), 1)
+
+  for (const [data, reason] of [
+    [{ verifiedAt: new Date() }, /already verified/],
+    [{ verifiedAt: null, consumedAt: new Date() }, /already used/],
+    [{ consumedAt: null, expiresAt: new Date(0) }, /has expired/],
+  ] as const) {
+    await db.emailOtp.update({ where: { id: otp.id }, data })
+    const row = await deadLetter('sendOtpEmail', payload('111111'))
+    await assert.rejects(() => deadLetters.redrive(row.id), reason)
+  }
 })
 
 test('redrive CLI: exit 0 with a summary; exit 1 for refusals and malformed arguments', async () => {

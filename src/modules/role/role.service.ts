@@ -1,17 +1,19 @@
 // Purpose: Role management business logic: list, show, create, update and delete roles with
 //   permission validation, audit logging and RBAC cache invalidation.
 // Caller: role.controller.
-// Dependencies: role.repository, Prisma transactions, cache.service, role.permissions,
-//   sluggable, system.service (activity log).
+// Dependencies: role.repository, Prisma transactions, cache.service, rbac-cache.service,
+//   role.permissions, sluggable, system.service (activity log).
 // Main Functions: getRoles, getRole, createRole, updateRole, deleteRole, _validateAccess.
-// Side Effects: Writes roles and activity logs; after commit deletes the cached RBAC/profile
-//   entries of the role's tracked users in one Redis call and untracks only those users.
+// Side Effects: Writes roles and activity logs; after commit bumps the RBAC version (every
+//   cached access entry becomes stale), then deletes the cached RBAC/profile entries of the
+//   role's tracked users in one Redis call and untracks only those users.
 import { Request } from 'express'
 import prisma from '../../config/database'
 import { Prisma, Role } from '@prisma/client'
 import AppError from '../../utils/appError'
 import roleRepository from './role.repository'
 import cacheService from '../../services/cache.service'
+import { invalidateAccess } from '../../services/rbac-cache.service'
 import { ALL_PERMISSIONS } from './role.permissions'
 import { makeUniqueSlug } from '../../utils/sluggable'
 import systemService from '../../services/system.service'
@@ -20,11 +22,12 @@ import { PrismaTx } from '../../types/prisma'
 
 const cacheKey = (id: string | number): string => `role:${id}`
 
-// Drops the cached access (and profile, which embeds the role) of every user the RBAC
-// middleware tracked for this role. srem removes only the members read here: a user whose
-// access is cached concurrently stays tracked for the next invalidation, whereas deleting the
-// whole set would lose it until the cache entry expires.
+// Invalidates access first (version bump: correct even for entries written concurrently),
+// then frees the cached access and profile (which embeds the role) of every user the RBAC
+// middleware tracked for this role. srem removes only the members read here: a user cached
+// concurrently stays tracked, so the next role change still drops their profile.
 async function invalidateRoleUsers(roleId: number): Promise<void> {
+  await invalidateAccess()
   const setKey = `role-users:${roleId}`
   const userIds = await cacheService.smembers(setKey)
   await cacheService.del(

@@ -1,12 +1,13 @@
 // Purpose: System maintenance and audit logging: expired-token cleanup, outbox and
 //   dead-letter retention, and activity-log writes.
 // Caller: system.processor (maintenance jobs); module services (logActivity).
-// Dependencies: Prisma, auth, outbox and dead-letter repositories, config/env (retention
-//   days), logger.
+// Dependencies: Prisma, auth, otp, outbox and dead-letter repositories, config/env (retention
+//   days, OTP registration window), logger.
 // Main Functions: cleanupExpiredTokens, cleanupOutbox, cleanupDeadLetterJobs, logActivity,
 //   generateDefaultDescription.
-// Side Effects: Deletes expired tokens (refresh tokens in bounded batches, since rotated rows
-//   are kept until expiry) and old terminal outbox / dead-letter rows (bounded batches);
+// Side Effects: Deletes expired tokens (refresh tokens and registration codes in bounded
+//   batches; rotated refresh rows are kept until expiry) and old terminal outbox / dead-letter
+//   rows (bounded batches);
 //   inserts activity_logs rows.
 import { Prisma } from '@prisma/client'
 import prisma from '../config/database'
@@ -14,6 +15,7 @@ import logger from '../config/logger'
 import { env } from '../config/env'
 import { PrismaTx } from '../types/prisma'
 import authRepository from '../modules/auth/auth.repository'
+import otpRepository from '../modules/otp/otp.repository'
 import outboxRepository from '../modules/outbox/outbox.repository'
 import deadLetterRepository from '../modules/dead-letter/dead-letter.repository'
 
@@ -42,7 +44,12 @@ class SystemService {
       },
     })
 
-    logger.info('Finished cleanup of expired tokens', { refreshTokens })
+    // A code is useful until expiry plus the registration window that follows verification.
+    const registrationCodes = await otpRepository.deleteExpired(
+      new Date(now.getTime() - env.OTP_VERIFIED_WINDOW_MINUTES * 60_000),
+    )
+
+    logger.info('Finished cleanup of expired tokens', { refreshTokens, registrationCodes })
   }
 
   // Retention: PUBLISHED rows only keep an empty payload; FAILED rows are already copied

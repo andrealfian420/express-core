@@ -13,6 +13,7 @@ export const EMAIL_JOBS = {
   VERIFICATION: 'sendVerificationEmail',
   VERIFICATION_SUCCESS: 'sendVerificationSuccessEmail',
   RESET_PASSWORD: 'sendResetPasswordEmail',
+  OTP_CODE: 'sendOtpEmail',
 } as const
 
 export const SYSTEM_JOBS = {

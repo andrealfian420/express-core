@@ -45,6 +45,12 @@ test('env: defaults match the previous inline fallbacks and blank values count a
   assert.equal(parsed.JWT_ACCESS_EXPIRES, '15m')
   assert.equal(parsed.REFRESH_TOKEN_EXPIRES_DAYS, 7)
   assert.equal(parsed.REFRESH_GRACE_SECONDS, 30)
+  assert.equal(parsed.REGISTRATION_VERIFICATION, 'link')
+  assert.equal(parsed.REGISTRATION_DEFAULT_ROLE, undefined)
+  assert.equal(parsed.OTP_EXPIRES_MINUTES, 10)
+  assert.equal(parsed.OTP_RESEND_COOLDOWN_SECONDS, 60)
+  assert.equal(parsed.OTP_MAX_ATTEMPTS, 5)
+  assert.equal(parsed.OTP_VERIFIED_WINDOW_MINUTES, 30)
   assert.equal(parsed.EMAIL_VERIFICATION_EXPIRES_HOURS, 24)
   assert.equal(parsed.PASSWORD_RESET_EXPIRES_MINUTES, 60)
   assert.equal(parsed.BCRYPT_ROUNDS, 10)
@@ -97,6 +103,8 @@ test('env: missing and malformed values fail fast, naming every key and no value
     MAIL_DRIVER: 'sendmail',
     OUTBOX_LEASE_SECONDS: '5',
     REFRESH_GRACE_SECONDS: '0',
+    REGISTRATION_VERIFICATION: 'sms',
+    OTP_MAX_ATTEMPTS: '0',
   })
   for (const key of [
     'DATABASE_URL',
@@ -110,6 +118,8 @@ test('env: missing and malformed values fail fast, naming every key and no value
     'MAIL_DRIVER',
     'OUTBOX_LEASE_SECONDS',
     'REFRESH_GRACE_SECONDS',
+    'REGISTRATION_VERIFICATION',
+    'OTP_MAX_ATTEMPTS',
   ])
     assert.match(malformed, new RegExp(`${key}: `))
   assert.doesNotMatch(malformed, /super-secret|hunter2/)

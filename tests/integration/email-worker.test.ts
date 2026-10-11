@@ -5,7 +5,7 @@
 // Dependencies: Outbox relay, email worker/processor, worker logging, dead-letter repository,
 //   mocked Nodemailer transport (no SMTP connection), HTTP helper, isolated PostgreSQL/Redis.
 // Main Functions: Registration and reset delivery cases; retry, marker, permanent-failure,
-//   dead-letter-write-failure and processor guard cases.
+//   dead-letter-write-failure and processor guard cases; registration code email.
 // Side Effects: Writes isolated identity, token, outbox, queue and dead-letter records;
 //   test-owned workers are closed in `finally`.
 import test from 'node:test'
@@ -209,9 +209,9 @@ test('email: a failed dead-letter write is logged and the worker keeps processin
   }
 })
 
-test('email: link jobs without a token fail permanently and send nothing', async (t) => {
+test('email: link jobs without a token and code jobs without a code fail permanently and send nothing', async (t) => {
   const { sent } = fakeTransport(t)
-  for (const name of ['sendVerificationEmail', 'sendResetPasswordEmail'])
+  for (const name of ['sendVerificationEmail', 'sendResetPasswordEmail', 'sendOtpEmail'])
     await assert.rejects(
       () =>
         processEmailJob({
@@ -232,4 +232,17 @@ test('email: reset links point at PASSWORD_RESET_URL with the token', async (t) 
     data: { email: 'user@example.invalid', name: 'User', token: 'reset-token' },
   } as unknown as Job)
   assert.equal(linkOf(sent[0]), 'http://test.invalid/reset-password?token=reset-token')
+})
+
+test('email: registration code emails carry the code and its validity', async (t) => {
+  const { sent } = fakeTransport(t)
+  await processEmailJob({
+    id: '3',
+    name: 'sendOtpEmail',
+    data: { email: 'new@example.invalid', code: '042517', expiresMinutes: 10 },
+  } as unknown as Job)
+  assert.equal(sent[0].to, 'new@example.invalid')
+  assert.equal(sent[0].subject, 'Your Verification Code')
+  assert.match(sent[0].html, /042517/)
+  assert.match(sent[0].html, /valid for <strong>10 minutes<\/strong>/)
 })

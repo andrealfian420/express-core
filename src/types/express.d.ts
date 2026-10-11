@@ -1,5 +1,9 @@
-//  This file is used to extend the Express Request Interface to include our custom properties.
-
+// Purpose: Extend Express Request with authentication/RBAC fields and declare the cached RBAC
+//   user shape.
+// Caller: auth.middleware, rbac.middleware, rbac-cache.service, controllers reading req.user.
+// Dependencies: Express namespace.
+// Main Functions: RoleData, CachedUserData, Express.Request augmentation.
+// Side Effects: None (type declarations only).
 // export empty object to convert this file into a module and avoid polluting the global namespace
 export {}
 
@@ -12,6 +16,8 @@ export interface RoleData {
 export interface CachedUserData {
   id: string | number
   role: RoleData | null
+  // RBAC version read before the database lookup (see services/rbac-cache.service.ts).
+  rbacVersion?: number
 }
 
 // declare global to extend the Express namespace and its Request interface

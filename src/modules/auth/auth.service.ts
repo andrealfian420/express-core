@@ -1,9 +1,10 @@
-// Purpose: Authentication business logic: registration with email verification, login,
-//   refresh-token rotation, logout, email verification and password reset.
+// Purpose: Authentication business logic: registration (email link or verified OTP, optional
+//   default role), login, refresh-token rotation, logout, email verification and password
+//   reset.
 // Caller: auth.controller; integration tests.
-// Dependencies: auth.repository, refresh-rotation, user.repository, outbox.repository, Prisma
-//   transactions, bcrypt, token/JWT utils, cache.service, logger, config/env (token lifetimes,
-//   bcrypt cost).
+// Dependencies: auth.repository, refresh-rotation, registration.settings, otp.service,
+//   user.repository, outbox.repository, Prisma transactions, bcrypt, token/JWT utils,
+//   cache.service, logger, config/env (token lifetimes, bcrypt cost).
 // Main Functions: register, login, refreshAccessToken, logout, verifyEmail,
 //   requestPasswordReset, resetPassword.
 // Side Effects: Writes users and refresh/verification/reset tokens; records verification,
@@ -15,7 +16,6 @@
 import bcrypt from 'bcryptjs'
 import authRepository from './auth.repository'
 import { generateToken, hashToken } from '../../utils/token'
-import { Prisma } from '@prisma/client'
 import prisma from '../../config/database'
 import AppError from '../../utils/appError'
 import { generateAccessToken } from '../../utils/jwt'
@@ -27,7 +27,9 @@ import { makeUniqueSlug } from '../../utils/sluggable'
 import userRepository from '../user/user.repository'
 import cacheService from '../../services/cache.service'
 import { PrismaTx } from '../../types/prisma'
-import { AuthTokens, RegisterData } from './auth.types'
+import { AuthTokens, RegisterData, RegisterInput } from './auth.types'
+import { registrationSettings } from './registration.settings'
+import otpService from '../otp/otp.service'
 import { env } from '../../config/env'
 
 const {
@@ -39,19 +41,26 @@ const {
 
 // This service contains the business logic for authentication-related operations.
 class AuthService {
-  async register(
-    userData: Prisma.UserUncheckedCreateInput,
-  ): Promise<RegisterData> {
+  // Link mode: unverified account + verification link email. OTP mode: the verified code is
+  // consumed in the same transaction and the account starts verified (no link email).
+  async register(userData: RegisterInput): Promise<RegisterData> {
+    const otpMode = registrationSettings.mode() === 'otp'
+
     // Use transaction to ensure user and verification token are created atomically
     const result = await prisma.$transaction(async (tx: PrismaTx) => {
-      const existingUser = await authRepository.findUserByEmail(
-        userData.email as string,
-        tx,
-      )
+      const existingUser = otpMode
+        ? await authRepository.findUserByEmailInsensitive(userData.email, tx)
+        : await authRepository.findUserByEmail(userData.email, tx)
 
       if (existingUser) {
         throw new AppError('Email already in use', 400)
       }
+
+      if (otpMode) {
+        await otpService.consumeForRegistration(tx, userData.email, userData.registrationToken)
+      }
+
+      const roleId = await this.defaultRoleId(tx)
 
       const hashedPassword = await bcrypt.hash(
         userData.password as string,
@@ -76,11 +85,17 @@ class AuthService {
           slug,
           email: userData.email,
           password: hashedPassword,
+          roleId,
+          isEmailVerified: otpMode,
         },
         tx,
       )
 
       const { password, ...safeUserData } = user
+
+      if (otpMode) {
+        return { user: safeUserData }
+      }
 
       const token = generateToken()
 
@@ -108,6 +123,19 @@ class AuthService {
     logger.info(`New user registered: ${result.user.email}`)
 
     return { user: result.user }
+  }
+
+  // REGISTRATION_DEFAULT_ROLE (slug) → role id; null when unset. A slug that matches no
+  // active role is a deployment error: refuse to register rather than silently skip it.
+  private async defaultRoleId(tx: PrismaTx): Promise<number | null> {
+    const slug = registrationSettings.defaultRoleSlug()
+    if (!slug) return null
+    const roleId = await authRepository.findActiveRoleIdBySlug(slug, tx)
+    if (roleId === null) {
+      logger.error('REGISTRATION_DEFAULT_ROLE does not match an active role', { slug })
+      throw new AppError('Registration is temporarily unavailable', 500)
+    }
+    return roleId
   }
 
   async login(email: string, password: string): Promise<AuthTokens> {

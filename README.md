@@ -84,6 +84,7 @@ express-core/
     │   └── xss.middleware.ts        # XSS sanitizer for req.body / req.query
     ├── modules/
     │   ├── auth/           # register, login, logout, refresh, verify-email, password-reset
+    │   ├── otp/            # Registration code (send/verify/consume) for REGISTRATION_VERIFICATION=otp
     │   ├── user/           # User CRUD (auth + RBAC + avatar upload) + client-safe serializer
     │   ├── profile/        # Logged-in user profile (auth + avatar upload)
     │   ├── role/           # Role CRUD + access list (auth + RBAC)
@@ -160,6 +161,7 @@ Background Process (run-workers.ts — single instance, owns all schedules)
 | `User`                   | `slug`, `email`, `password`, `avatar`, `roleId`, `isEmailVerified`, `deletedAt`     | Soft delete, belongs to Role  |
 | `RefreshToken`           | `token` (SHA-256), `userId`, `familyId`, `expiresAt`, `rotatedAt`                   | Kept until expiry; cascades   |
 | `EmailVerificationToken` | `token` (UUID), `userId`, `expiresAt`                                               | Cascades on user delete       |
+| `EmailOtp`               | `email` (lowercased, unique), `codeHash`, `attempts`, `expiresAt`, `verifiedAt`     | OTP registration; pruned      |
 | `PasswordResetToken`     | `token` (UUID), `userId`, `expiresAt`, `usedAt`                                     | Cascades on user delete       |
 | `ActivityLog`            | `userId`, `action`, `description`, `subjectType`, `subjectId`, `oldData`, `newData` | Audit trail                   |
 | `Outbox`                 | `queueName`, `jobName`, `payload`, `status`, `attempts`, `availableAt`             | Email/job intents; pruned     |
@@ -172,17 +174,20 @@ Permissions are stored as a JSON array in the `Role.access` column (e.g., `["mod
 The `checkPermission(permission)` middleware:
 
 1. Reads the user ID from `req.user.sub` (set by `authMiddleware`)
-2. Looks up the user's role from Redis cache (`user-role:{userId}`, TTL 5 min)
-3. Falls back to Prisma if cache miss, then caches the result
+2. Reads the cached role (`user-role:{userId}`, TTL 5 min) and the RBAC version
+   (`rbac:version`) in one Redis call; an entry stamped with an older version is a miss
+3. On a miss reads the user and role from Prisma and caches them stamped with the version
+   read in step 2
 4. Checks if the required permission string exists in `role.access`
 5. Returns `403` if the permission is not granted
 
 Available permission keys are defined in [src/modules/role/role.permissions.ts](src/modules/role/role.permissions.ts).
 To add a module's permissions, add its group to `ACCESS_LIST` and the same values to
 `PERMISSIONS` (a unit test fails if the two drift apart), then run `make seed`: the
-super-admin role gains the new values and no other role changes. After a role edit, the
-cached access of that role's users is dropped at once; a cached entry otherwise expires
-within 5 minutes.
+super-admin role gains the new values and no other role changes. Role edits, role
+deletion, user role changes and user deletion bump the version after commit, so they apply
+on the next request, even when a request was caching the old state at that moment. The
+seeder does not use Redis: permissions it grants apply within 5 minutes.
 
 ### Rate Limiting
 
@@ -368,6 +373,13 @@ PASSWORD_RESET_EXPIRES_MINUTES=30
 BCRYPT_ROUNDS=10
 # Required: client page that receives ?token=… from the password-reset email
 PASSWORD_RESET_URL=http://localhost:5173/reset-password
+# Self-registration: link (email link) or otp (code first); optional default role slug
+REGISTRATION_VERIFICATION=link
+REGISTRATION_DEFAULT_ROLE=
+OTP_EXPIRES_MINUTES=10
+OTP_RESEND_COOLDOWN_SECONDS=60
+OTP_MAX_ATTEMPTS=5
+OTP_VERIFIED_WINDOW_MINUTES=30
 
 # SMTP Mail
 SMTP_HOST=sandbox.smtp.mailtrap.io
@@ -638,7 +650,9 @@ Base URL: `http://localhost:3001/api/v1`
 
 | Method | Endpoint                       | Auth | Description                                        |
 | ------ | ------------------------------ | ---- | -------------------------------------------------- |
-| POST   | `/auth/register`               |      | Register a new user (sends verification email)     |
+| POST   | `/auth/register`               |      | Register a new user (see Self-registration)        |
+| POST   | `/auth/send-otp`               |      | OTP mode: email a 6-digit registration code        |
+| POST   | `/auth/verify-otp`             |      | OTP mode: check the code → `registrationToken`     |
 | POST   | `/auth/login`                  |      | Login — returns access token + sets refresh cookie |
 | POST   | `/auth/logout`                 | ✓    | Logout — revokes every token of this login         |
 | POST   | `/auth/refresh`                | ✓    | New access token; rotates the refresh cookie       |
@@ -655,6 +669,23 @@ Browser protection:
   (`403 Request origin not allowed`). Callers that send neither header (server-to-server,
   mobile, curl) are accepted.
 - Any request carrying a disallowed `Origin` is rejected by CORS with `403 Not allowed by CORS`.
+
+Self-registration:
+
+- `REGISTRATION_VERIFICATION=link` (default): register creates an unverified account and
+  emails a verification link; the OTP routes answer 404.
+- `REGISTRATION_VERIFICATION=otp`: `POST /auth/send-otp {email}` emails a code (valid
+  `OTP_EXPIRES_MINUTES`, resend after `OTP_RESEND_COOLDOWN_SECONDS`, refused with 409 when an
+  account already uses the address in any letter case). `POST /auth/verify-otp {email, code}`
+  returns `{ registrationToken }`; each code allows `OTP_MAX_ATTEMPTS` tries in total, counted
+  before checking, so parallel guesses cannot exceed it. `POST /auth/register` with that
+  `registrationToken` within `OTP_VERIFIED_WINDOW_MINUTES` creates a verified account; the
+  token proves the verification, so knowing a verified address is not enough to claim it.
+  Codes are stored as HMACs bound to the address, never in plain text or logs. Links sent
+  before switching modes keep working.
+- `REGISTRATION_DEFAULT_ROLE=<role slug>` (optional, both modes) is the role given to
+  self-registered users. A slug that matches no active role makes registration answer 500
+  and log an error. Never point it at a privileged role.
 
 Refresh sessions:
 

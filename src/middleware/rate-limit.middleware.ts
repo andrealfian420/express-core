@@ -2,7 +2,8 @@
 // Caller: routes/index.ts (apiRateLimiter), auth.route.ts (auth limiters), tests.
 // Dependencies: express-rate-limit, rate-limit-redis, config/redis, config/env (NODE_ENV), logger.
 // Main Functions: createRateLimiter, apiRateLimiter, authRateLimiter, loginRateLimiter,
-//   registerRateLimiter, requestPasswordResetRateLimiter, resetPasswordRateLimiter.
+//   registerRateLimiter, requestPasswordResetRateLimiter, resetPasswordRateLimiter,
+//   sendOtpRateLimiter, verifyOtpRateLimiter.
 // Side Effects: Increments per-IP counters in Redis; logs rejected requests.
 import { Request, Response, NextFunction } from 'express'
 import rateLimit, { Options as RateLimitOptions } from 'express-rate-limit'
@@ -98,6 +99,20 @@ const resetPasswordRateLimiter = createRateLimiter({
   max: isProduction ? 10 : 1000, // limit each IP to 10 reset attempts per windowMs
 })
 
+// Send registration code: strict to prevent email flooding (the service also enforces a
+// per-address resend cooldown)
+const sendOtpRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: isProduction ? 5 : 1000, // limit each IP to 5 code requests per windowMs
+})
+
+// Verify registration code: IP backstop; the per-code attempt limit in the database is the
+// real brute-force gate
+const verifyOtpRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: isProduction ? 20 : 1000, // limit each IP to 20 verification tries per windowMs
+})
+
 export {
   createRateLimiter,
   apiRateLimiter,
@@ -106,4 +121,6 @@ export {
   registerRateLimiter,
   requestPasswordResetRateLimiter,
   resetPasswordRateLimiter,
+  sendOtpRateLimiter,
+  verifyOtpRateLimiter,
 }

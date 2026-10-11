@@ -1,7 +1,8 @@
 // Purpose: Re-drive a dead-lettered job exactly once through the outbox, after its root cause
-//   has been fixed, refusing replays whose link token is no longer usable.
+//   has been fixed, refusing replays whose link token or registration code is no longer usable.
 // Caller: scripts/redrive-dlq.ts (operator CLI); integration tests.
-// Dependencies: Prisma transactions, outbox and dead_letter_jobs tables, queue/job constants.
+// Dependencies: Prisma transactions, outbox, dead_letter_jobs and token/OTP tables, queue/job
+//   constants, otp.code (code check for registration-code replays).
 // Main Functions: redrive, RedriveError, RedriveResult.
 // Side Effects: In one transaction INSERTs an outbox row (PENDING; the relay publishes it) and
 //   stamps the dead-letter row with redriven_at, redriven_by and redrive_outbox_id. The
@@ -10,6 +11,7 @@ import { Prisma } from '@prisma/client'
 import prisma from '../../config/database'
 import { PrismaTx } from '../../types/prisma'
 import { EMAIL_JOBS, QUEUE_NAMES } from '../../jobs/config/queue.constants'
+import { otpCodeMatches } from '../otp/otp.code'
 
 export class RedriveError extends Error {
   constructor(message: string) {
@@ -55,6 +57,17 @@ const REPLAY_GUARDS: Record<
     if (!record) return 'the password-reset token no longer exists'
     if (record.usedAt) return 'the password-reset token was already used'
     if (record.expiresAt <= new Date()) return 'the password-reset token has expired'
+    return null
+  },
+  [EMAIL_JOBS.OTP_CODE]: async (payload, tx) => {
+    const { email, code } = (payload ?? {}) as { email?: unknown; code?: unknown }
+    const record =
+      typeof email === 'string' ? await tx.emailOtp.findUnique({ where: { email } }) : null
+    if (!record || typeof code !== 'string' || !otpCodeMatches(email as string, code, record.codeHash))
+      return 'the registration code was replaced or no longer exists'
+    if (record.consumedAt) return 'the registration code was already used'
+    if (record.verifiedAt) return 'the registration code was already verified'
+    if (record.expiresAt <= new Date()) return 'the registration code has expired'
     return null
   },
 }

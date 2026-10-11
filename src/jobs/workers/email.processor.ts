@@ -1,8 +1,10 @@
-// Purpose: Process email jobs (verification, verification success, password reset) without
-//   starting a BullMQ worker, so the processor can be exercised directly.
+// Purpose: Process email jobs (verification, verification success, password reset,
+//   registration code) without starting a BullMQ worker, so the processor can be exercised
+//   directly.
 // Caller: email.worker.ts (BullMQ worker); integration tests.
 // Dependencies: email.service, mailer (PermanentMailError), cache.service (sent markers),
-//   utils/url, config/env (PASSWORD_RESET_URL), logger, BullMQ UnrecoverableError.
+//   utils/url, config/env (PASSWORD_RESET_URL, OTP_EXPIRES_MINUTES), logger, BullMQ
+//   UnrecoverableError.
 // Main Functions: processEmailJob, EmailJobData, SENT_MARKER_TTL_SECONDS.
 // Side Effects: Sends email through the configured transport; writes the Redis marker
 //   `email:sent:<jobId>` after a confirmed send.
@@ -20,8 +22,11 @@ import { EMAIL_JOBS } from '../config/queue.constants'
 
 export interface EmailJobData {
   email: string
-  name: string
+  name?: string
   token?: string
+  // Registration code jobs (EMAIL_JOBS.OTP_CODE)
+  code?: string
+  expiresMinutes?: number
 }
 
 // Longer than any replay window: BullMQ retries, stalled recovery and relay re-publishing
@@ -31,11 +36,16 @@ export const SENT_MARKER_TTL_SECONDS = 86_400
 // A link job without its token can never succeed: fail it permanently instead of
 // retrying or mailing a link that cannot work.
 function requireToken(job: Job<EmailJobData>): string {
-  if (!job.data.token) {
-    throw new UnrecoverableError(`Missing token for ${job.name} job ${job.id}`)
+  return required(job, 'token')
+}
+
+function required(job: Job<EmailJobData>, field: 'token' | 'code'): string {
+  const value = job.data[field]
+  if (!value) {
+    throw new UnrecoverableError(`Missing ${field} for ${job.name} job ${job.id}`)
   }
 
-  return job.data.token
+  return value
 }
 
 async function dispatch(job: Job<EmailJobData>): Promise<void> {
@@ -43,7 +53,7 @@ async function dispatch(job: Job<EmailJobData>): Promise<void> {
     case EMAIL_JOBS.VERIFICATION: {
       const token = requireToken(job)
       await emailService.sendVerificationEmail(job.data.email, {
-        name: job.data.name,
+        name: job.data.name ?? '',
         token,
         link: appUrl('/api/v1/auth/verify-email', { token }),
       })
@@ -52,7 +62,7 @@ async function dispatch(job: Job<EmailJobData>): Promise<void> {
     case EMAIL_JOBS.RESET_PASSWORD: {
       const token = requireToken(job)
       await emailService.sendResetPasswordEmail(job.data.email, {
-        name: job.data.name,
+        name: job.data.name ?? '',
         token,
         link: withQuery(env.PASSWORD_RESET_URL, { token }),
       })
@@ -60,7 +70,13 @@ async function dispatch(job: Job<EmailJobData>): Promise<void> {
     }
     case EMAIL_JOBS.VERIFICATION_SUCCESS:
       await emailService.sendVerificationSuccessEmail(job.data.email, {
-        name: job.data.name,
+        name: job.data.name ?? '',
+      })
+      break
+    case EMAIL_JOBS.OTP_CODE:
+      await emailService.sendOtpEmail(job.data.email, {
+        code: required(job, 'code'),
+        expiresMinutes: job.data.expiresMinutes ?? env.OTP_EXPIRES_MINUTES,
       })
       break
     default:

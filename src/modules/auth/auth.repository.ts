@@ -2,7 +2,8 @@
 //   revocation, expiry cleanup), email verification tokens and password-reset tokens.
 // Caller: auth.service, auth/refresh-rotation, profile.service, user.service, system.service.
 // Dependencies: Prisma client (optionally a transaction client).
-// Main Functions: findUserByEmail, createUser, createRefreshToken, findRefreshToken,
+// Main Functions: findUserByEmail, findUserByEmailInsensitive, findActiveRoleIdBySlug,
+//   createUser, createRefreshToken, findRefreshToken,
 //   markRefreshTokenRotated, deleteRefreshToken, deleteRefreshTokenFamily,
 //   deleteRefreshTokensByUserId, deleteExpiredRefreshTokens, createEmailVerificationToken,
 //   createPasswordResetToken, deleteUnusedPasswordResetTokens, findUniqueToken,
@@ -54,6 +55,36 @@ class AuthRepository {
         deletedAt: null,
       },
     })
+  }
+
+  // Registration OTP: any active account whose email equals `email` regardless of case.
+  // Prisma's insensitive `equals` becomes ILIKE with the value unescaped, where `_` and `%`
+  // are wildcards (john_doe@ would match johnXdoe@), so compare lower() exactly instead. Like
+  // the exact lookup this scans users (no email index yet); the OTP endpoints are rate limited.
+  async findUserByEmailInsensitive(
+    email: string,
+    txOrPrisma: PrismaTx | null = null,
+  ): Promise<{ id: number } | null> {
+    const db = txOrPrisma || prisma
+    const rows = (await db.$queryRaw(Prisma.sql`
+      SELECT "id" FROM "users"
+      WHERE lower("email") = lower(${email}) AND "deleted_at" IS NULL
+      LIMIT 1
+    `)) as { id: number }[]
+    return rows[0] ?? null
+  }
+
+  // REGISTRATION_DEFAULT_ROLE lookup; slugs are unique among active roles.
+  async findActiveRoleIdBySlug(
+    slug: string,
+    txOrPrisma: PrismaTx | null = null,
+  ): Promise<number | null> {
+    const db = txOrPrisma || prisma
+    const role = await db.role.findFirst({
+      where: { slug, deletedAt: null },
+      select: { id: true },
+    })
+    return role?.id ?? null
   }
 
   async createUser(

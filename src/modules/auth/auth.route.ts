@@ -1,5 +1,6 @@
-// Purpose: Route definitions for authentication (register, login, refresh, logout, email
-//   verification, password reset) with rate limiters, validation and the origin guard.
+// Purpose: Route definitions for authentication (register, registration OTP, login, refresh,
+//   logout, email verification, password reset) with rate limiters, validation and the
+//   origin guard.
 // Caller: src/routes/index.ts — mounted at /api/v1/auth before the general API limiter.
 // Dependencies: auth.controller, validate, rate-limit and origin-check middleware.
 // Main Functions: Express router (default export).
@@ -8,6 +9,7 @@ import { Router } from 'express'
 import validate from '../../middleware/validate.middleware'
 import checkOrigin from '../../middleware/origin-check.middleware'
 import authController from './auth.controller'
+import otpRoutes from '../otp/otp.route'
 
 import {
   registerSchema,
@@ -51,6 +53,9 @@ router.post(
   [resetPasswordRateLimiter, validate(resetPasswordSchema)],
   authController.resetPassword,
 )
+
+// /send-otp and /verify-otp (REGISTRATION_VERIFICATION=otp only; 404 otherwise)
+router.use(otpRoutes)
 
 router.use(authRateLimiter) // Apply general auth rate limiter to all subsequent auth routes
 router.post('/refresh', checkOrigin, authController.refreshAccessToken)

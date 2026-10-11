@@ -2,7 +2,8 @@
 // Caller: Prisma Client generation, `prisma migrate`, seed and maintenance scripts.
 // Dependencies: DATABASE_URL.
 // Main Functions: Role, User, RefreshToken (rotation family + sealed successor),
-//   EmailVerificationToken, PasswordResetToken, ActivityLog, Outbox and DeadLetterJob models.
+//   EmailVerificationToken, EmailOtp (registration codes), PasswordResetToken, ActivityLog,
+//   Outbox and DeadLetterJob models.
 // Side Effects: None by itself; prisma/migrations applies the matching schema changes.
 generator client {
   provider = "prisma-client-js"
@@ -84,6 +85,23 @@ model EmailVerificationToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("email_verification_tokens")
+}
+
+// Registration OTP (REGISTRATION_VERIFICATION=otp): one row per lowercased email. code_hash is
+// an HMAC of email + code; attempts counts every verification try; consumed_at is set by
+// registration. Rows are deleted once expired past the registration window.
+model EmailOtp {
+  id         String    @id @default(uuid())
+  email      String    @unique
+  codeHash   String    @map("code_hash")
+  attempts   Int       @default(0)
+  sentAt     DateTime  @default(now()) @map("sent_at")
+  expiresAt  DateTime  @map("expires_at")
+  verifiedAt DateTime? @map("verified_at")
+  consumedAt DateTime? @map("consumed_at")
+
+  @@index([expiresAt])
+  @@map("email_otps")
 }
 
 model PasswordResetToken {

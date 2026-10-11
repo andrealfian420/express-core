@@ -1,16 +1,19 @@
 // Purpose: Business logic for admin user management (list, show, create, update, delete).
 // Caller: user.controller.
 // Dependencies: user.repository, auth.repository (session revocation), Prisma transactions,
-//   bcrypt, sluggable, cache, storage and system services, config/env (BCRYPT_ROUNDS).
+//   bcrypt, sluggable, cache, rbac-cache, storage and system services, config/env
+//   (BCRYPT_ROUNDS).
 // Main Functions: getUsers, getUserBySlug, getUserByEmail, createUser, updateUser, deleteUser.
-// Side Effects: Writes users and audit logs, deletes replaced avatars, invalidates RBAC cache;
-//   deleteUser soft-deletes the user and deletes all of their refresh tokens atomically.
+// Side Effects: Writes users and audit logs, deletes replaced avatars; after commit bumps the
+//   RBAC version and drops the user's cached access; deleteUser soft-deletes the user and
+//   deletes all of their refresh tokens atomically.
 import { Request } from 'express'
 import AppError from '../../utils/appError'
 import userRepository from './user.repository'
 import authRepository from '../auth/auth.repository'
 import bcrypt from 'bcryptjs'
 import cacheService from '../../services/cache.service'
+import { invalidateAccess } from '../../services/rbac-cache.service'
 import { makeUniqueSlug } from '../../utils/sluggable'
 import systemService from '../../services/system.service'
 import prisma from '../../config/database'
@@ -200,7 +203,9 @@ class UserService {
     })
 
     // If slug changed, the new one will be populated on next request
-    // Invalidate RBAC cache so role changes take effect immediately
+    // Invalidate RBAC cache so role changes take effect immediately (the version bump also
+    // covers a request that read the old role before this commit)
+    await invalidateAccess()
     await cacheService.del(`user-role:${user.id}`)
 
     return updated
@@ -243,6 +248,7 @@ class UserService {
       )
     })
 
+    await invalidateAccess()
     await cacheService.del(`user-role:${user.id}`)
   }
 }

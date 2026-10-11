@@ -1,8 +1,9 @@
 // Purpose: Thin JSON cache over Redis so business logic never calls ioredis directly: strings
-//   (get/set/del) and sets (sadd/smembers/srem) used for RBAC/profile caching and invalidation.
-// Caller: rbac.middleware, profile/user/role/auth services, email.processor (sent marker).
+//   (get/mget/set/del/incr) and sets (sadd/smembers/srem) used for RBAC/profile caching and
+//   invalidation.
+// Caller: rbac-cache.service, profile/user/role/auth services, email.processor (sent marker).
 // Dependencies: ioredis singleton (src/config/redis.ts).
-// Main Functions: get, set, del, sadd, smembers, srem.
+// Main Functions: get, mget, set, del, incr, sadd, smembers, srem.
 // Side Effects: Reads, writes and deletes Redis keys.
 import redis from '../config/redis'
 
@@ -20,6 +21,19 @@ class CacheService {
     }
 
     return JSON.parse(data)
+  }
+
+  // Reads several keys in one round trip; each value is parsed like get() (null when missing).
+  async mget<T extends unknown[]>(...keys: string[]): Promise<{ [K in keyof T]: T[K] | null }> {
+    const values = await redis.mget(...keys)
+    return values.map((value) => (value ? JSON.parse(value) : null)) as {
+      [K in keyof T]: T[K] | null
+    }
+  }
+
+  // Atomically increments an integer counter (created at 1, no expiry) and returns it.
+  async incr(key: string): Promise<number> {
+    return await redis.incr(key)
   }
 
   // stores a value in Redis under the specified key,

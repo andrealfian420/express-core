@@ -1,13 +1,16 @@
-// Purpose: Render and send transactional emails (verification, password reset, verified notice).
+// Purpose: Render and send transactional emails (verification, password reset, verified notice,
+//   registration code).
 // Caller: jobs/workers/email.processor.ts.
 // Dependencies: email/mailer (sendMail: configured transport + failure classification),
 //   email templates, logger.
-// Main Functions: sendVerificationEmail, sendResetPasswordEmail, sendVerificationSuccessEmail.
+// Main Functions: sendVerificationEmail, sendResetPasswordEmail, sendVerificationSuccessEmail,
+//   sendOtpEmail.
 // Side Effects: Sends email through the configured mail transport.
 import { sendMail } from '../email/mailer'
 import verifyEmailTemplate from '../email/templates/verify-email.template'
 import resetPasswordTemplate from '../email/templates/reset-password.template'
 import successVerifyEmailTemplate from '../email/templates/success-verify-email.template'
+import otpCodeTemplate from '../email/templates/otp-code.template'
 import logger from '../config/logger'
 
 interface VerifyEmailData {
@@ -18,6 +21,11 @@ interface VerifyEmailData {
 
 interface SuccessVerifyEmailData {
   name: string
+}
+
+interface OtpEmailData {
+  code: string
+  expiresMinutes: number
 }
 
 // This service contains the business logic for sending emails.
@@ -61,6 +69,16 @@ class EmailService {
       to,
       subject: 'Email Verified Successfully',
       html,
+    })
+  }
+
+  async sendOtpEmail(to: string, data: OtpEmailData): Promise<void> {
+    logger.info(`Sending registration code email to: ${to}`) // never log the code
+
+    await sendMail({
+      to,
+      subject: 'Your Verification Code',
+      html: otpCodeTemplate(data),
     })
   }
 }

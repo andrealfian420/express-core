@@ -695,6 +695,12 @@ PASSWORD_RESET_EXPIRES_MINUTES=30
 BCRYPT_ROUNDS=10
 # Required: client page that receives ?token=… from the password-reset email
 PASSWORD_RESET_URL="http://localhost:5173/reset-password"
+REGISTRATION_VERIFICATION=link
+REGISTRATION_DEFAULT_ROLE=
+OTP_EXPIRES_MINUTES=10
+OTP_RESEND_COOLDOWN_SECONDS=60
+OTP_MAX_ATTEMPTS=5
+OTP_VERIFIED_WINDOW_MINUTES=30
 
 # ==============================================================================
 # SMTP Mail
@@ -1044,6 +1050,12 @@ PASSWORD_RESET_EXPIRES_MINUTES=30
 BCRYPT_ROUNDS=12
 # Required: client page that receives ?token=… from the password-reset email
 PASSWORD_RESET_URL="https://example.com/reset-password"
+REGISTRATION_VERIFICATION=link
+REGISTRATION_DEFAULT_ROLE=
+OTP_EXPIRES_MINUTES=10
+OTP_RESEND_COOLDOWN_SECONDS=60
+OTP_MAX_ATTEMPTS=5
+OTP_VERIFIED_WINDOW_MINUTES=30
 
 # SMTP
 SMTP_HOST=smtp.your-provider.com

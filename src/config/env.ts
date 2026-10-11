@@ -137,6 +137,17 @@ const schema = z
     PASSWORD_RESET_URL: required()
       .pipe(z.string().trim())
       .refine(isHttpUrl, 'must be an absolute http(s) URL'),
+    // Self-registration: `link` (verification email link, default) or `otp` (6-digit code
+    // verified before registering; account created verified). Optional role slug for new users.
+    REGISTRATION_VERIFICATION: z.preprocess(
+      blankToUndefined,
+      z.enum(['link', 'otp'], { error: 'must be link or otp' }).default('link'),
+    ),
+    REGISTRATION_DEFAULT_ROLE: text(),
+    OTP_EXPIRES_MINUTES: integer(10, 1, 60),
+    OTP_RESEND_COOLDOWN_SECONDS: integer(60, 10, 3600),
+    OTP_MAX_ATTEMPTS: integer(5, 1, 20),
+    OTP_VERIFIED_WINDOW_MINUTES: integer(30, 1, 1440),
     MAIL_DRIVER: z.preprocess(
       blankToUndefined,
       z.enum(['smtp'], { error: 'must be smtp' }).default('smtp'),
