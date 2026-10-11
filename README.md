@@ -156,7 +156,7 @@ Background Process (run-workers.ts — single instance, owns all schedules)
 | ------------------------ | ----------------------------------------------------------------------------------- | ----------------------------- |
 | `Role`                   | `slug`, `title`, `userType`, `access` (JSON array), `deletedAt`                     | Soft delete, RBAC permissions |
 | `User`                   | `slug`, `email`, `password`, `avatar`, `roleId`, `isEmailVerified`, `deletedAt`     | Soft delete, belongs to Role  |
-| `RefreshToken`           | `token` (UUID), `userId`, `expiresAt`                                               | Cascades on user delete       |
+| `RefreshToken`           | `token` (SHA-256), `userId`, `familyId`, `expiresAt`, `rotatedAt`                   | Kept until expiry; cascades   |
 | `EmailVerificationToken` | `token` (UUID), `userId`, `expiresAt`                                               | Cascades on user delete       |
 | `PasswordResetToken`     | `token` (UUID), `userId`, `expiresAt`, `usedAt`                                     | Cascades on user delete       |
 | `ActivityLog`            | `userId`, `action`, `description`, `subjectType`, `subjectId`, `oldData`, `newData` | Audit trail                   |
@@ -337,6 +337,7 @@ DATABASE_URL="postgresql://user:password@localhost:5432/your_database?schema=pub
 JWT_ACCESS_SECRET=replace_with_a_secure_random_string
 JWT_ACCESS_EXPIRES=15m
 REFRESH_TOKEN_EXPIRES_DAYS=7
+REFRESH_GRACE_SECONDS=30
 EMAIL_VERIFICATION_EXPIRES_HOURS=24
 PASSWORD_RESET_EXPIRES_MINUTES=30
 BCRYPT_ROUNDS=10
@@ -607,8 +608,8 @@ Base URL: `http://localhost:3001/api/v1`
 | ------ | ------------------------------ | ---- | -------------------------------------------------- |
 | POST   | `/auth/register`               |      | Register a new user (sends verification email)     |
 | POST   | `/auth/login`                  |      | Login — returns access token + sets refresh cookie |
-| POST   | `/auth/logout`                 | ✓    | Logout — clears refresh token                      |
-| POST   | `/auth/refresh`                | ✓    | Renew access token via HTTP-only refresh cookie    |
+| POST   | `/auth/logout`                 | ✓    | Logout — revokes every token of this login         |
+| POST   | `/auth/refresh`                | ✓    | New access token; rotates the refresh cookie       |
 | GET    | `/auth/verify-email?token=`    |      | Verify email address                               |
 | POST   | `/auth/request-password-reset` |      | Email a reset link (`PASSWORD_RESET_URL?token=…`)  |
 | POST   | `/auth/reset-password`         |      | Reset password with token                          |
@@ -622,6 +623,18 @@ Browser protection:
   (`403 Request origin not allowed`). Callers that send neither header (server-to-server,
   mobile, curl) are accepted.
 - Any request carrying a disallowed `Origin` is rejected by CORS with `403 Not allowed by CORS`.
+
+Refresh sessions:
+
+- Every refresh rotates the cookie. Requests that present the same token within
+  `REFRESH_GRACE_SECONDS` (default 30; parallel tabs, retries) all receive the same newest
+  token. It is returned only after the database commit and is stored only in encrypted form.
+- A rotated token presented after the grace window counts as reuse: every token of that
+  login is revoked (`401`); the user's other logins stay signed in.
+- Logout revokes the whole login. Password change, password reset and account deletion
+  revoke every login of the user.
+- Rotated tokens stay until they expire (reuse detection), so `refresh_tokens` holds one
+  row per refresh; the hourly cleanup deletes expired rows in batches.
 
 ### Users _(auth + RBAC permission required)_
 

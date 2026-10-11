@@ -1,13 +1,16 @@
 // Purpose: Protect cache, readiness, maintenance cleanup and audit-log persistence behavior.
 // Caller: Node integration runner.
-// Dependencies: Cache/system services, Prisma, isolated Redis, HTTP helper, actor fixtures.
-// Main Functions: Stateful shared-service regression cases.
+// Dependencies: Cache/system services, auth repository (refresh retention), Prisma, isolated
+//   Redis, HTTP helper, actor fixtures.
+// Main Functions: Stateful shared-service regression cases, including batched refresh-token
+//   retention.
 // Side Effects: Writes only isolated test records and cache keys.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { setupIntegration, actor, db } from '../support/integration'
 import cache from '../../src/services/cache.service'
 import system from '../../src/services/system.service'
+import authRepository from '../../src/modules/auth/auth.repository'
 import redis from '../../src/config/redis'
 import prisma from '../../src/config/database'
 import { api } from '../support/http'
@@ -63,6 +66,25 @@ test('system: cleanup removes only expired refresh, verification and reset token
       rows.map((r) => r.token),
       ['valid'],
     )
+})
+
+test('system: expired refresh tokens go in bounded batches; rotated tokens stay until they expire', async () => {
+  const { user } = await actor()
+  const past = new Date(Date.now() - 1000)
+  const future = new Date(Date.now() + 3600_000)
+  for (const [token, expiresAt, rotatedAt] of [
+    ['expired-1', past, null],
+    ['expired-2', past, new Date()],
+    ['expired-3', past, null],
+    ['rotated', future, new Date(Date.now() - 86_400_000)],
+    ['live', future, null],
+  ] as const)
+    await db.refreshToken.create({ data: { token, userId: user.id, expiresAt, rotatedAt } })
+  assert.equal(await authRepository.deleteExpiredRefreshTokens(new Date(), 2), 3)
+  assert.deepEqual(
+    (await db.refreshToken.findMany({ orderBy: { token: 'asc' } })).map((r) => r.token),
+    ['live', 'rotated'],
+  )
 })
 
 test('system: activity log persists actor, subject and before/after snapshots', async () => {

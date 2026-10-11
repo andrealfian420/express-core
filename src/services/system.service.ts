@@ -1,16 +1,19 @@
 // Purpose: System maintenance and audit logging: expired-token cleanup, outbox and
 //   dead-letter retention, and activity-log writes.
 // Caller: system.processor (maintenance jobs); module services (logActivity).
-// Dependencies: Prisma, outbox and dead-letter repositories, config/env (retention days), logger.
+// Dependencies: Prisma, auth, outbox and dead-letter repositories, config/env (retention
+//   days), logger.
 // Main Functions: cleanupExpiredTokens, cleanupOutbox, cleanupDeadLetterJobs, logActivity,
 //   generateDefaultDescription.
-// Side Effects: Deletes expired tokens and old terminal outbox / dead-letter rows (bounded
-//   batches); inserts activity_logs rows.
+// Side Effects: Deletes expired tokens (refresh tokens in bounded batches, since rotated rows
+//   are kept until expiry) and old terminal outbox / dead-letter rows (bounded batches);
+//   inserts activity_logs rows.
 import { Prisma } from '@prisma/client'
 import prisma from '../config/database'
 import logger from '../config/logger'
 import { env } from '../config/env'
 import { PrismaTx } from '../types/prisma'
+import authRepository from '../modules/auth/auth.repository'
 import outboxRepository from '../modules/outbox/outbox.repository'
 import deadLetterRepository from '../modules/dead-letter/dead-letter.repository'
 
@@ -21,13 +24,7 @@ class SystemService {
     const now = new Date()
     logger.info('Starting cleanup of expired tokens')
 
-    await prisma.refreshToken.deleteMany({
-      where: {
-        expiresAt: {
-          lt: now, // Delete tokens that have expired before the current time
-        },
-      },
-    })
+    const refreshTokens = await authRepository.deleteExpiredRefreshTokens(now)
 
     await prisma.emailVerificationToken.deleteMany({
       where: {
@@ -45,7 +42,7 @@ class SystemService {
       },
     })
 
-    logger.info('Finished cleanup of expired tokens')
+    logger.info('Finished cleanup of expired tokens', { refreshTokens })
   }
 
   // Retention: PUBLISHED rows only keep an empty payload; FAILED rows are already copied

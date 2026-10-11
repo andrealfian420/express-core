@@ -1,12 +1,14 @@
 // Purpose: Business logic for admin user management (list, show, create, update, delete).
 // Caller: user.controller.
-// Dependencies: user.repository, Prisma transactions, bcrypt, sluggable, cache, storage and
-//   system services, config/env (BCRYPT_ROUNDS).
+// Dependencies: user.repository, auth.repository (session revocation), Prisma transactions,
+//   bcrypt, sluggable, cache, storage and system services, config/env (BCRYPT_ROUNDS).
 // Main Functions: getUsers, getUserBySlug, getUserByEmail, createUser, updateUser, deleteUser.
-// Side Effects: Writes users and audit logs, deletes replaced avatars, invalidates RBAC cache.
+// Side Effects: Writes users and audit logs, deletes replaced avatars, invalidates RBAC cache;
+//   deleteUser soft-deletes the user and deletes all of their refresh tokens atomically.
 import { Request } from 'express'
 import AppError from '../../utils/appError'
 import userRepository from './user.repository'
+import authRepository from '../auth/auth.repository'
 import bcrypt from 'bcryptjs'
 import cacheService from '../../services/cache.service'
 import { makeUniqueSlug } from '../../utils/sluggable'
@@ -217,9 +219,11 @@ class UserService {
       storageService.deleteFile('avatars', user.avatar)
     }
 
-    // Use transaction to ensure user deletion and activity logging are atomic
+    // Use transaction to ensure user deletion, session revocation and activity logging are
+    // atomic: a soft-deleted user keeps no refresh token that could mint access tokens.
     await prisma.$transaction(async (tx: PrismaTx) => {
       await userRepository.delete(user.id, tx)
+      await authRepository.deleteRefreshTokensByUserId(user.id, tx)
 
       // Log activity within transaction
       await systemService.logActivity(

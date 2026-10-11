@@ -3,13 +3,15 @@
 //   and the client-safe registration response.
 // Caller: Node HTTP runner.
 // Dependencies: Express app through Supertest, actor fixtures, Prisma.
-// Main Functions: CORS, origin-guard matrix, refresh/logout rejection, Bearer/cookie and
-//   registration response cases.
+// Main Functions: CORS, origin-guard matrix, refresh/logout rejection, parallel cookie
+//   refresh and reuse, Bearer/cookie and registration response cases.
 // Side Effects: Writes isolated identity and refresh-token rows.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { setupIntegration, actor, db, password } from '../support/integration'
 import { api } from '../support/http'
+import { env } from '../../src/config/env'
+import { hashToken } from '../../src/utils/token'
 
 setupIntegration()
 
@@ -80,6 +82,37 @@ test('refresh/logout: a foreign Referer is rejected before the refresh token is 
     .set('Cookie', refreshed.headers['set-cookie'])
     .set('Referer', `${allowed}/settings`)
     .expect(200)
+  assert.equal(await db.refreshToken.count({ where: { userId: user.id } }), 0)
+})
+
+const cookieToken = (res: { headers: Record<string, unknown> }) =>
+  /refreshToken=([0-9a-f]+);/.exec(String(res.headers['set-cookie']))?.[1]
+
+test('refresh: parallel cookie refreshes get one successor; reuse after the grace window ends the session', async () => {
+  const { user } = await actor()
+  const login = await api('post', '/auth/login')
+    .send({ email: user.email, password })
+    .expect(200)
+  const cookie = login.headers['set-cookie']
+  const responses = await Promise.all(
+    [1, 2, 3].map(() => api('post', '/auth/refresh').set('Cookie', cookie)),
+  )
+  assert.deepEqual(
+    responses.map((response) => response.status),
+    [200, 200, 200],
+  )
+  const successors = new Set(responses.map(cookieToken))
+  assert.equal(successors.size, 1)
+  assert.notEqual([...successors][0], cookieToken(login))
+
+  await db.refreshToken.update({
+    where: { token: hashToken(cookieToken(login)!) },
+    data: { rotatedAt: new Date(Date.now() - (env.REFRESH_GRACE_SECONDS + 1) * 1000) },
+  })
+  await api('post', '/auth/refresh').set('Cookie', cookie).expect(401)
+  await api('post', '/auth/refresh')
+    .set('Cookie', responses[0].headers['set-cookie'])
+    .expect(401)
   assert.equal(await db.refreshToken.count({ where: { userId: user.id } }), 0)
 })
 

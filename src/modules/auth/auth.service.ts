@@ -1,14 +1,17 @@
 // Purpose: Authentication business logic: registration with email verification, login,
 //   refresh-token rotation, logout, email verification and password reset.
 // Caller: auth.controller; integration tests.
-// Dependencies: auth.repository, user.repository, outbox.repository, Prisma transactions,
-//   bcrypt, token/JWT utils, cache.service, logger, config/env (token lifetimes, bcrypt cost).
+// Dependencies: auth.repository, refresh-rotation, user.repository, outbox.repository, Prisma
+//   transactions, bcrypt, token/JWT utils, cache.service, logger, config/env (token lifetimes,
+//   bcrypt cost).
 // Main Functions: register, login, refreshAccessToken, logout, verifyEmail,
 //   requestPasswordReset, resetPassword.
 // Side Effects: Writes users and refresh/verification/reset tokens; records verification,
 //   verified-notice and password-reset email intents in the outbox inside the same
 //   transaction (tokens travel only in the job payload, never in HTTP responses; nothing
-//   touches Redis on these request paths); invalidates cached profiles.
+//   touches Redis on these request paths); logout revokes the session family in the database,
+//   then invalidates the cached profile (best effort). Expired-token deletions and reuse
+//   revocations commit before the request is rejected.
 import bcrypt from 'bcryptjs'
 import authRepository from './auth.repository'
 import { generateToken, hashToken } from '../../utils/token'
@@ -16,6 +19,7 @@ import { Prisma } from '@prisma/client'
 import prisma from '../../config/database'
 import AppError from '../../utils/appError'
 import { generateAccessToken } from '../../utils/jwt'
+import { rotateRefreshToken } from './refresh-rotation'
 import outboxRepository from '../outbox/outbox.repository'
 import { EMAIL_JOBS, QUEUE_NAMES } from '../../jobs/config/queue.constants'
 import logger from '../../config/logger'
@@ -135,56 +139,57 @@ class AuthService {
     return { accessToken, refreshToken }
   }
 
+  // Rotation with a database grace window (see refresh-rotation): parallel or retried
+  // requests with the same token all receive one successor; the successor reaches the client
+  // only after the transaction commits, and Redis is not involved.
   async refreshAccessToken(token: string): Promise<AuthTokens> {
     if (!token) {
       throw new AppError('Refresh token required', 401)
     }
 
-    // Use transaction to ensure token rotation is atomic (delete old token and create new one)
-    return await prisma.$transaction(async (tx: PrismaTx) => {
-      const hashedToken = hashToken(token)
-      const record = await authRepository.findRefreshToken(hashedToken, tx)
+    const outcome = await prisma.$transaction((tx: PrismaTx) =>
+      rotateRefreshToken(token, tx),
+    )
 
-      if (!record) {
-        throw new AppError('Invalid refresh token', 401)
-      }
-
-      if (record.expiresAt < new Date()) {
-        await authRepository.deleteRefreshToken(hashedToken, tx)
+    switch (outcome.kind) {
+      case 'issued':
+        return {
+          accessToken: generateAccessToken({ id: outcome.userId }),
+          refreshToken: outcome.refreshToken,
+        }
+      case 'expired':
         throw new AppError('Refresh token expired', 401)
-      }
-
-      // Rotate refresh token: delete old one and create a new one
-      const newRefreshToken = generateToken()
-      await authRepository.deleteRefreshToken(hashedToken, tx)
-      await authRepository.createRefreshToken(
-        {
-          token: hashToken(newRefreshToken),
-          userId: record.userId,
-          expiresAt: new Date(
-            Date.now() + REFRESH_TOKEN_EXPIRES_DAYS * 86400000,
-          ),
-        },
-        tx,
-      )
-
-      const accessToken = generateAccessToken({ id: record.userId })
-      const refreshToken = newRefreshToken
-
-      return { accessToken, refreshToken }
-    })
+      case 'reused':
+        logger.warn('Refresh token reused after its grace window; session revoked', {
+          userId: outcome.userId,
+          familyId: outcome.familyId,
+        })
+        throw new AppError('Invalid refresh token', 401)
+      default:
+        throw new AppError('Invalid refresh token', 401)
+    }
   }
 
+  // Revokes the whole session family, so no token of it (not even a predecessor still in its
+  // grace window) can refresh again. The database write comes first: a Redis failure only
+  // leaves a stale profile cache entry, never a live session.
   async logout(token: string): Promise<void> {
-    const hashedToken = hashToken(token)
-    const record = await authRepository.findRefreshToken(hashedToken)
+    const record = await authRepository.findRefreshToken(hashToken(token))
 
     if (!record) {
       throw new AppError('Invalid refresh token', 401)
     }
 
-    await cacheService.del(`profile:${record.userId}`) // Invalidate cached profile on logout
-    await authRepository.deleteRefreshToken(hashedToken)
+    await authRepository.deleteRefreshTokenFamily(record.userId, record.familyId)
+
+    try {
+      await cacheService.del(`profile:${record.userId}`)
+    } catch (err) {
+      logger.warn('Could not invalidate the cached profile after logout', {
+        userId: record.userId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
   }
 
   async verifyEmail(token: string): Promise<void> {
@@ -201,12 +206,13 @@ class AuthService {
       }
 
       if (record.expiresAt < new Date()) {
-        await tx.emailVerificationToken.delete({
+        // Returned, not thrown: the deletion must commit before the request is rejected.
+        await tx.emailVerificationToken.deleteMany({
           where: {
             token: token,
           },
         })
-        throw new AppError('Token expired', 400)
+        return null
       }
 
       const updatedUser = await tx.user.update({
@@ -233,6 +239,10 @@ class AuthService {
 
       return updatedUser
     })
+
+    if (!user) {
+      throw new AppError('Token expired', 400)
+    }
 
     logger.info(`Email verified successfully for user: ${user.email}`)
   }
@@ -280,8 +290,9 @@ class AuthService {
       }
 
       if (record.expiresAt < new Date()) {
+        // Returned, not thrown: the deletion must commit before the request is rejected.
         await authRepository.deletePasswordResetToken(token, tx)
-        throw new AppError('Token expired', 400)
+        return null
       }
 
       if (record.usedAt) {
@@ -301,11 +312,15 @@ class AuthService {
         tx,
       )
 
-      // Invalidate all existing refresh tokens for the user to force logout from all devices
+      // Revoke every session (rotated rows included, so no grace successor survives)
       await authRepository.deleteRefreshTokensByUserId(record.userId, tx)
 
       return record.userId
     })
+
+    if (userId === null) {
+      throw new AppError('Token expired', 400)
+    }
 
     logger.info(`Password reset successfully for user ID: ${userId}`)
   }

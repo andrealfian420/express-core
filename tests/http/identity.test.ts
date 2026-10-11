@@ -2,8 +2,8 @@
 //   user/role administration and RBAC cache invalidation through the real router and persistence.
 // Caller: Node HTTP runner.
 // Dependencies: Express app through Supertest, actor fixtures, Prisma.
-// Main Functions: Identity lifecycle, response field safety, audit, soft delete and
-//   permission-cache cases.
+// Main Functions: Identity lifecycle, response field safety, audit, soft delete (including
+//   session revocation) and permission-cache cases.
 // Side Effects: Writes isolated identity, audit and cache records.
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -130,6 +130,20 @@ test('role/user: create, validation, duplicate rejection, safe serialization, up
   )
   await api('delete', `/roles/${role.slug}`, token).expect(200)
   await api('get', `/roles/${role.slug}`, token).expect(404)
+})
+
+test('user deletion: the deleted user can no longer refresh (regression)', async () => {
+  const admin = await actor()
+  const { user } = await actor()
+  const login = await api('post', '/auth/login')
+    .send({ email: user.email, password })
+    .expect(200)
+  await api('delete', `/users/${user.slug}`, admin.token).expect(200)
+  // Before T5 the soft-deleted user's refresh token kept minting access tokens.
+  await api('post', '/auth/refresh')
+    .set('Cookie', login.headers['set-cookie'])
+    .expect(401)
+  assert.equal(await db.refreshToken.count({ where: { userId: user.id } }), 0)
 })
 
 test('role: permission edits invalidate previously cached user access', async () => {

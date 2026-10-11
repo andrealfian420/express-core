@@ -1,8 +1,8 @@
 // Purpose: Prisma data model and datasource for Express Core (PostgreSQL).
 // Caller: Prisma Client generation, `prisma migrate`, seed and maintenance scripts.
 // Dependencies: DATABASE_URL.
-// Main Functions: Role, User, RefreshToken, EmailVerificationToken, PasswordResetToken,
-//   ActivityLog, Outbox and DeadLetterJob models.
+// Main Functions: Role, User, RefreshToken (rotation family + sealed successor),
+//   EmailVerificationToken, PasswordResetToken, ActivityLog, Outbox and DeadLetterJob models.
 // Side Effects: None by itself; prisma/migrations applies the matching schema changes.
 generator client {
   provider = "prisma-client-js"
@@ -54,15 +54,23 @@ model User {
   @@index([roleId])
 }
 
+// One row per issued refresh token (SHA-256 hash only). A rotated row is kept until it
+// expires: within the grace window it hands out its sealed successor, afterwards any reuse
+// revokes the whole family (one login session).
 model RefreshToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  userId    Int      @map("user_id")
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  id                  String    @id @default(uuid())
+  token               String    @unique
+  userId              Int       @map("user_id")
+  familyId            String    @default(dbgenerated("gen_random_uuid()")) @map("family_id") @db.Uuid
+  expiresAt           DateTime  @map("expires_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  rotatedAt           DateTime? @map("rotated_at")
+  successorCiphertext Bytes?    @map("successor_ciphertext")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, familyId])
+  @@index([expiresAt])
   @@map("refresh_tokens")
 }
 

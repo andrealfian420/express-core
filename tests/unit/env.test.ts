@@ -44,6 +44,7 @@ test('env: defaults match the previous inline fallbacks and blank values count a
   assert.equal(parsed.REDIS_PORT, 6379)
   assert.equal(parsed.JWT_ACCESS_EXPIRES, '15m')
   assert.equal(parsed.REFRESH_TOKEN_EXPIRES_DAYS, 7)
+  assert.equal(parsed.REFRESH_GRACE_SECONDS, 30)
   assert.equal(parsed.EMAIL_VERIFICATION_EXPIRES_HOURS, 24)
   assert.equal(parsed.PASSWORD_RESET_EXPIRES_MINUTES, 60)
   assert.equal(parsed.BCRYPT_ROUNDS, 10)
@@ -95,6 +96,7 @@ test('env: missing and malformed values fail fast, naming every key and no value
     PASSWORD_RESET_URL: '/reset-password',
     MAIL_DRIVER: 'sendmail',
     OUTBOX_LEASE_SECONDS: '5',
+    REFRESH_GRACE_SECONDS: '0',
   })
   for (const key of [
     'DATABASE_URL',
@@ -107,6 +109,7 @@ test('env: missing and malformed values fail fast, naming every key and no value
     'PASSWORD_RESET_URL',
     'MAIL_DRIVER',
     'OUTBOX_LEASE_SECONDS',
+    'REFRESH_GRACE_SECONDS',
   ])
     assert.match(malformed, new RegExp(`${key}: `))
   assert.doesNotMatch(malformed, /super-secret|hunter2/)

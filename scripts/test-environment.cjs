@@ -71,6 +71,7 @@ function configure() {
   process.env.JWT_ACCESS_SECRET = 'test-only-access-secret-do-not-deploy'
   process.env.JWT_ACCESS_EXPIRES = '15m'
   process.env.REFRESH_TOKEN_EXPIRES_DAYS = '7'
+  process.env.REFRESH_GRACE_SECONDS = '30'
   process.env.EMAIL_VERIFICATION_EXPIRES_HOURS = '24'
   process.env.PASSWORD_RESET_EXPIRES_MINUTES = '30'
   process.env.BCRYPT_ROUNDS = '4'

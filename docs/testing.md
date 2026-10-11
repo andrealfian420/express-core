@@ -1,7 +1,7 @@
 <!-- Purpose: Document isolated testing commands, scope, fixture safety, CI gates and known baseline defects.
 Caller: Developers, reviewers and coding agents.
 Dependencies: Makefile, scripts/test-*.cjs, scripts/test-compose.sh, docker-compose.test.yml, CI templates, src/config/env.ts.
-Main Functions: Explain execution, structure (including outbox, relay, dead-letter and email delivery suites), isolation guards, reports, CI usage and troubleshooting.
+Main Functions: Explain execution, structure (including outbox, relay, dead-letter, email delivery and refresh-rotation suites), isolation guards, reports, CI usage and troubleshooting.
 Side Effects: None; the commands described here create and remove disposable test resources only. -->
 # Automated testing
 
@@ -38,23 +38,29 @@ user, password and database `express_core_test`, and Redis password `express_cor
 ## Structure and scope
 
 - `tests/unit`: environment guard, configuration validation (`src/config/env.ts`), the
-  graceful-shutdown sequence, HTTP request logging, mail failure classification, middleware
-  (Bearer auth, cookie-endpoint origin guard, validation, errors), storage root,
-  tokens/JWT/slugs/links/timeouts/pagination, the user response serializer and request
-  schemas. No database or Redis imports.
-- `tests/integration`: auth transactions, token lifecycles and the email intents they write to
-  the outbox (atomic with the business write, independent of Redis); the transactional outbox
-  and relay (`outbox.test.ts`: rollback, disjoint concurrent claims, lease recovery,
-  idempotent publishing, backoff, atomic dead-lettering, drain on stop, bounded retention);
-  email delivery through outbox → relay → real worker → mocked transport for verification and
-  reset links, transient retries, the sent marker, permanent failures and dead-letter writes
-  (`email-worker.test.ts`); the once-only re-drive and its CLI (`dead-letter.test.ts`); cache,
-  readiness failures, maintenance cleanup, audit persistence, cron schedules, Redis rate
-  limiting, and the real API/worker entrypoints run as child processes (`process.test.ts`).
+  graceful-shutdown sequence, HTTP request logging, mail failure classification, the sealed
+  refresh-token successor, middleware (Bearer auth, cookie-endpoint origin guard, validation,
+  errors), storage root, tokens/JWT/slugs/links/timeouts/pagination, the user response
+  serializer and request schemas. No database or Redis imports.
+- `tests/integration`: auth transactions, token lifecycles (expired-token deletions commit)
+  and the email intents they write to the outbox (atomic with the business write, independent
+  of Redis); refresh rotation under concurrency (`refresh.test.ts`: parallel requests share
+  one successor, the grace chain, reuse after the grace window revokes one session family,
+  rollback before commit, Redis failures, logout and password-reset revocation, including
+  revocation racing an uncommitted rotation, forced with a gate and observed through
+  `pg_stat_activity`); the
+  transactional outbox and relay (`outbox.test.ts`: rollback, disjoint concurrent claims,
+  lease recovery, idempotent publishing, backoff, atomic dead-lettering, drain on stop,
+  bounded retention); email delivery through outbox → relay → real worker → mocked transport
+  for verification and reset links, transient retries, the sent marker, permanent failures
+  and dead-letter writes (`email-worker.test.ts`); the once-only re-drive and its CLI
+  (`dead-letter.test.ts`); cache, readiness failures, maintenance cleanup (batched
+  refresh-token retention), audit persistence, cron schedules, Redis rate limiting, and the
+  real API/worker entrypoints run as child processes (`process.test.ts`).
 - `tests/http`: access matrix (401/403/200), CORS rejection, the Origin/Referer matrix on
-  cookie endpoints, Bearer-only protected routes, cookie attributes, client-safe user
-  payloads, profile ownership, user/role administration, audit records, soft delete and
-  RBAC cache invalidation.
+  cookie endpoints, Bearer-only protected routes, cookie attributes, parallel cookie refresh
+  and reuse, client-safe user payloads, profile ownership, user/role administration, audit
+  records, soft delete (which revokes the user's refresh sessions) and RBAC cache invalidation.
 - `tests/support`: guarded reset, the `actor()` identity fixture and the HTTP helper.
 
 Every feature, fix or behavior change must carry meaningful tests in the same change.
@@ -131,8 +137,6 @@ from a container.
 
 | Defect | Planned stage |
 | --- | --- |
-| Concurrent refreshes with one token race; the loser fails on the missing row | T5 |
-| Expired refresh/verification/reset tokens are deleted and then an error is thrown inside the same transaction, so the deletion rolls back (cron cleanup still removes them) | T5 (refresh); others noted |
 | `npm run lint` crashes ("object is not iterable"): `eslint.config.mjs` imports `@typescript-eslint/eslint-plugin` instead of `typescript-eslint`, and its legacy `configs.recommended` object cannot be spread into a flat config | Outside the plan; needs approval |
 
 ## Verification performed for the harness

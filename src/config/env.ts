@@ -127,6 +127,9 @@ const schema = z
         .default('15m'),
     ),
     REFRESH_TOKEN_EXPIRES_DAYS: integer(7, 1, 3650),
+    // Seconds a just-rotated refresh token still yields the same successor (parallel tabs,
+    // retried requests); a later reuse revokes the session family.
+    REFRESH_GRACE_SECONDS: integer(30, 1, 300),
     EMAIL_VERIFICATION_EXPIRES_HOURS: integer(24, 1, 8760),
     PASSWORD_RESET_EXPIRES_MINUTES: integer(60, 1, 10080),
     BCRYPT_ROUNDS: integer(10, 4, 31),

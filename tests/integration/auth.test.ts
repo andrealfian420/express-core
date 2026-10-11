@@ -4,8 +4,9 @@
 // Dependencies: Auth service, outbox repository, Prisma, isolated Redis/BullMQ email queue,
 //   actor fixtures.
 // Main Functions: Registration/verification/reset intents (atomic with the business write,
-//   no Redis on the request path), login, sequential refresh rotation, logout and
-//   password-reset lifecycle cases.
+//   no Redis on the request path), login, sequential refresh rotation, logout,
+//   password-reset lifecycle and committed expired-token deletion cases (concurrent refresh
+//   lives in refresh.test.ts).
 // Side Effects: Writes isolated identity, token and outbox records.
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -117,6 +118,8 @@ test('auth: expired verification token is rejected and the account stays inactiv
     (await db.user.findUniqueOrThrow({ where: { id: user.id } })).isEmailVerified,
     false,
   )
+  // Regression: the deletion used to roll back together with the thrown error.
+  assert.equal(await db.emailVerificationToken.count(), 0)
 })
 
 test('auth: login stores only the refresh hash; sequential refresh rotates; logout revokes', async () => {
@@ -128,21 +131,28 @@ test('auth: login stores only the refresh hash; sequential refresh rotates; logo
   assert.equal(stored.token, hashToken(login.refreshToken))
   const rotated = await auth.refreshAccessToken(login.refreshToken)
   assert.notEqual(rotated.refreshToken, login.refreshToken)
-  assert.equal(await db.refreshToken.count({ where: { userId: user.id } }), 1)
-  await assert.rejects(() => auth.refreshAccessToken(login.refreshToken), /Invalid refresh token/)
+  // The predecessor stays, marked rotated, for the grace window and reuse detection.
+  assert.equal(await db.refreshToken.count({ where: { userId: user.id } }), 2)
+  assert.equal(
+    (await auth.refreshAccessToken(login.refreshToken)).refreshToken,
+    rotated.refreshToken,
+  )
   await assert.rejects(() => auth.refreshAccessToken(''), /required/)
+  await assert.rejects(() => auth.refreshAccessToken('unknown-refresh'), /Invalid refresh token/)
   await auth.logout(rotated.refreshToken)
   assert.equal(await db.refreshToken.count({ where: { userId: user.id } }), 0)
   await assert.rejects(() => auth.refreshAccessToken(rotated.refreshToken))
+  await assert.rejects(() => auth.refreshAccessToken(login.refreshToken))
   await assert.rejects(() => auth.logout(rotated.refreshToken), /Invalid refresh token/)
 })
 
-test('auth: expired refresh token is rejected', async () => {
+test('auth: expired refresh token is rejected and its deletion commits (regression)', async () => {
   const { user } = await actor()
   await db.refreshToken.create({
     data: { token: hashToken('expired-refresh'), userId: user.id, expiresAt: new Date(0) },
   })
   await assert.rejects(() => auth.refreshAccessToken('expired-refresh'), /expired/)
+  assert.equal(await db.refreshToken.count(), 0)
 })
 
 test('auth: a reset request records the email intent and only the newest token stays valid', async () => {
@@ -183,5 +193,7 @@ test('auth: password reset is single-use, expires and revokes refresh sessions',
     data: { token: 'expired-reset', userId: user.id, expiresAt: new Date(0) },
   })
   await assert.rejects(() => auth.resetPassword('expired-reset', 'Another3!'), /expired/)
+  // Regression: the deletion used to roll back together with the thrown error.
+  assert.equal(await db.passwordResetToken.count({ where: { token: 'expired-reset' } }), 0)
   await assert.rejects(() => auth.resetPassword('unknown-reset', 'Another3!'), /Invalid token/)
 })
