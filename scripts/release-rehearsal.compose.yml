@@ -1,0 +1,63 @@
+# Purpose: Isolation override for the release rehearsal: runs a release's own
+#   docker-compose.yml with prebuilt production images and none of the fixed names, host ports,
+#   bind mounts or .env of the development stack, plus Mailpit as the SMTP server.
+# Caller: scripts/release-rehearsal.sh (as the second entry of COMPOSE_FILE).
+# Dependencies: Docker Compose v2.24+ (!reset/!override), images express-core-rehearsal:<tag>,
+#   REHEARSAL_ENV_FILE (throwaway settings written by the rehearsal script).
+# Main Functions: Service overrides for postgres, redis, migrate, api and worker; mailpit.
+# Side Effects: Named volumes express-core-rehearsal-* and the express-core-rehearsal network.
+services:
+  postgres:
+    container_name: !reset null
+    ports: !reset []
+
+  redis:
+    container_name: !reset null
+    ports: !reset []
+
+  migrate:
+    container_name: !reset null
+    image: express-core-rehearsal:${IMAGE_TAG:?}
+    build: !reset null
+    env_file: !override
+      - ${REHEARSAL_ENV_FILE:?}
+
+  api:
+    container_name: !reset null
+    image: express-core-rehearsal:${IMAGE_TAG:?}
+    build: !reset null
+    env_file: !override
+      - ${REHEARSAL_ENV_FILE:?}
+    ports: !reset []
+    volumes: !override
+      - rehearsal-uploads:/app/client/storage/public/uploads
+      - rehearsal-logs:/app/client/storage/logs
+
+  worker:
+    container_name: !reset null
+    image: express-core-rehearsal:${IMAGE_TAG:?}
+    build: !reset null
+    env_file: !override
+      - ${REHEARSAL_ENV_FILE:?}
+
+  mailpit:
+    image: axllent/mailpit:v1.31.2
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 'true'
+      MP_SMTP_AUTH_ALLOW_INSECURE: 'true'
+    networks:
+      - express-core-network
+
+networks:
+  express-core-network:
+    name: express-core-rehearsal
+
+volumes:
+  express-core-pgdata:
+    name: express-core-rehearsal-pgdata
+  express-core-redisdata:
+    name: express-core-rehearsal-redisdata
+  rehearsal-uploads:
+    name: express-core-rehearsal-uploads
+  rehearsal-logs:
+    name: express-core-rehearsal-logs

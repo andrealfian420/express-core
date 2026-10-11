@@ -1,7 +1,7 @@
 <!-- Purpose: Document isolated testing commands, scope, fixture safety, CI gates and known baseline defects.
 Caller: Developers, reviewers and coding agents.
-Dependencies: Makefile, scripts/test-*.cjs, scripts/test-compose.sh, docker-compose.test.yml, CI templates, src/config/env.ts.
-Main Functions: Explain execution, structure (including outbox, relay, dead-letter, email delivery, refresh-rotation, paginator, role-cache, seed, registration OTP and email template suites), isolation guards, reports, CI usage and troubleshooting.
+Dependencies: Makefile, scripts/test-*.cjs, scripts/test-compose.sh, docker-compose.test.yml, CI templates, src/config/env.ts, docs/upgrading.md (release rehearsal).
+Main Functions: Explain execution (including the `ci` migration drift check), structure (including outbox, relay, dead-letter, email delivery, refresh-rotation, paginator, role-cache, seed, registration OTP and email template suites), isolation guards, reports, CI usage and troubleshooting.
 Side Effects: None; the commands described here create and remove disposable test resources only. -->
 # Automated testing
 
@@ -14,7 +14,7 @@ ports and no application `.env` file.
 
 | Command | Purpose |
 | --- | --- |
-| `make test` | Full suite (`ci`): unit, migrations, integration, HTTP, JUnit and cumulative coverage |
+| `make test` | Full suite (`ci`): unit, migrations and the migration drift check, integration, HTTP, JUnit and cumulative coverage |
 | `make test-unit` | Pure unit tests; no database or Redis services are started |
 | `make test-unit module=utils` | Run only test files whose name contains `utils` (works for every suite) |
 | `make test-watch` | Compile and re-run unit tests on change until interrupted |
@@ -109,7 +109,9 @@ the process test passes a fixture `.env` only to children started in other modes
 Before migrations the runner repeats the identity check against the live connection
 (`current_database()`, `current_user`); the fixture helper repeats it before every
 truncation. All committed migrations run against the disposable database; seeders are not
-run. Before each integration/HTTP case every application table is truncated (migration
+run. The `ci` suite (`make test`, `npm run test:ci`) then compares the migrated database with
+`prisma/schema.prisma` (`prisma migrate diff --exit-code`) and fails, printing the missing SQL,
+when a schema change has no migration. Before each integration/HTTP case every application table is truncated (migration
 metadata and PostGIS reference tables are kept) and the dedicated Redis is flushed. Suites
 run serially so resets never race.
 
@@ -129,7 +131,12 @@ with a deadline instead of fixed sleeps. The logger is silent and writes no file
 step before building or deploying: `npm ci`, `prisma generate`, `npm run build`, then
 `npm run test:ci` against disposable PostgreSQL and Redis service containers. Because CI
 service containers cannot receive a command, the Redis password is set with `CONFIG SET`
-before the tests. Any nonzero build, migration or test exit blocks the following steps.
+before the tests. Any nonzero build, migration, drift check or test exit blocks the following steps.
+
+The deploy step that follows pipes `scripts/deploy.sh` to the server with the commit SHA as
+`IMAGE_TAG`. The release rehearsal (`make release-rehearsal from=<ref>`: fresh install,
+upgrade, rollback and re-upgrade with production images and Mailpit) is a release check, not
+part of `make test`; see [upgrading.md](upgrading.md).
 
 JUnit files are written to `test-results/`; text summary, HTML and LCOV coverage to
 `coverage/`. Coverage includes untouched source files and excludes type declarations and

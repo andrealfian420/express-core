@@ -1,9 +1,15 @@
-# Production Override — Uses pre-built images from a container registry
-# instead of building locally. Used with CI/CD (Option A deployment).
+# Purpose: Production override that runs prebuilt registry images instead of local builds;
+#   every application service uses the same tag, ${IMAGE_TAG} (the commit SHA CI pushed).
+# Caller: scripts/deploy.sh (CI deploy step, manual deploy or rollback) together with
+#   docker-compose.yml.
+# Dependencies: Registry images pushed by the CI templates, IMAGE_TAG.
+# Main Functions: Image overrides for api, worker and migrate.
+# Side Effects: None by itself; Compose pulls and runs the images it names.
 #
 # Usage:
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   IMAGE_TAG=<commit sha> sh scripts/deploy.sh              # deploy (or roll back to) a tag
+#   IMAGE_TAG=<commit sha> docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
+#   Without IMAGE_TAG, Compose falls back to the `latest` tag.
 #
 # Setup:
 #   1. Copy this file: cp docker-compose.prod.yml.example docker-compose.prod.yml
@@ -15,16 +21,16 @@
 services:
   api:
     # Replace with your registry image URL
-    image: ghcr.io/your-org/your-project:latest
-    # image: docker.pkg.bitbucket.org/your-workspace/your-repo/your-project:latest
+    image: ghcr.io/your-org/your-project:${IMAGE_TAG:-latest}
+    # image: docker.pkg.bitbucket.org/your-workspace/your-repo/app:${IMAGE_TAG:-latest}
     build: !reset null
 
   worker:
-    image: ghcr.io/your-org/your-project:latest
-    # image: docker.pkg.bitbucket.org/your-workspace/your-repo/your-project:latest
+    image: ghcr.io/your-org/your-project:${IMAGE_TAG:-latest}
+    # image: docker.pkg.bitbucket.org/your-workspace/your-repo/app:${IMAGE_TAG:-latest}
     build: !reset null
 
   migrate:
-    image: ghcr.io/your-org/your-project:latest
-    # image: docker.pkg.bitbucket.org/your-workspace/your-repo/your-project:latest
+    image: ghcr.io/your-org/your-project:${IMAGE_TAG:-latest}
+    # image: docker.pkg.bitbucket.org/your-workspace/your-repo/app:${IMAGE_TAG:-latest}
     build: !reset null

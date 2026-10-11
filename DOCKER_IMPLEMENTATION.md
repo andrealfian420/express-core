@@ -1,3 +1,8 @@
+<!-- Purpose: Step-by-step Docker setup, production notes and VPS deployment guide for projects based on this boilerplate.
+Caller: Developers and operators setting up or deploying a project.
+Dependencies: Dockerfile, docker-compose*.yml, scripts/deploy.sh, the CI templates, docs/upgrading.md.
+Main Functions: Docker setup steps, production notes, VPS deployment (registry pull or build on VPS), CI/CD secrets, post-deploy checks.
+Side Effects: None; documentation only. -->
 # Docker Implementation Guide
 
 Step-by-step instructions to add Docker support to a project based on this boilerplate.
@@ -950,12 +955,9 @@ In production, Postgres and Redis should not be accessible from the host. Remove
 
 ### Image tagging for CI/CD
 
-For production deployments, tag images with git SHA or semver instead of `latest`:
-
-```bash
-docker compose build --build-arg VERSION=$(git rev-parse --short HEAD)
-docker tag express-core-api:latest registry.example.com/express-core-api:$(git rev-parse --short HEAD)
-```
+The CI templates tag every image with the full commit SHA (and `latest`) and deploy the SHA
+tag, so each deploy and rollback names an exact image. `docker-compose.prod.yml` reads it from
+`IMAGE_TAG`; see [docs/upgrading.md](docs/upgrading.md).
 
 ### Database backups
 
@@ -1172,30 +1174,34 @@ Create `docker-compose.prod.yml` (see `docker-compose.prod.yml.example` in repo)
 ```yaml
 services:
   api:
-    image: ghcr.io/your-org/your-project:latest # or Bitbucket registry URL
+    image: ghcr.io/your-org/your-project:${IMAGE_TAG:-latest} # or Bitbucket registry URL
     build: !reset null
 
   worker:
-    image: ghcr.io/your-org/your-project:latest
+    image: ghcr.io/your-org/your-project:${IMAGE_TAG:-latest}
     build: !reset null
 
   migrate:
-    image: ghcr.io/your-org/your-project:latest
+    image: ghcr.io/your-org/your-project:${IMAGE_TAG:-latest}
     build: !reset null
 ```
 
 #### Deploy commands
 
-```bash
-# Pull latest images from registry
-docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+CI deploys for you. By hand, in the directory holding the compose files and `.env` (copy
+`scripts/deploy.sh` there, or pipe it over SSH as the CI templates do):
 
-# Start/restart with zero-downtime
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```bash
+# Deploy (or roll back to) one image tag: pull, drain the outbox and queues, migrate,
+# start, and wait until the API and worker are healthy
+IMAGE_TAG=<commit sha> DEPLOY_DRAIN=true sh scripts/deploy.sh
 
 # Verify
 curl -f http://localhost:3001/api/v1/health/ready
 ```
+
+The drain stops the API until the new one is healthy. Options, failure handling and
+the rollback rules are in [docs/upgrading.md](docs/upgrading.md).
 
 #### CI/CD pipeline
 
@@ -1206,10 +1212,12 @@ See example pipeline configs in the repository:
 
 Both follow the same flow:
 
-1. Build Docker image on push to `main`
-2. Tag with git SHA + `latest`
-3. Push to container registry
-4. SSH into VPS → pull → restart → health check
+1. Verify on push to `main`: build and the full test suite (including the migration drift
+   check); a failure stops the pipeline
+2. Build the Docker image, tag it with the full commit SHA + `latest`
+3. Push to the container registry
+4. SSH into the VPS and pipe `scripts/deploy.sh` with `IMAGE_TAG=<sha>`: pull, drain, migrate,
+   start, then wait for the API and worker health checks
 
 ---
 
@@ -1304,6 +1312,8 @@ cat deploy_key
 
 ```
 [ ] Health endpoint returns 200: curl https://api.example.com/api/v1/health/ready
+[ ] Worker healthy (it sends all email): docker compose ps worker
+[ ] After an upgrade: seeders run once (see docs/upgrading.md)
 [ ] SSL working: check https://api.example.com in browser
 [ ] CORS working: test from your frontend domain
 [ ] Database seeded: admin user exists

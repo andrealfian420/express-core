@@ -1,10 +1,12 @@
-# Purpose: GitHub Actions template — verify (build + full test suite), build and push the
-#   production image to GHCR, then deploy to a VPS with Docker Compose.
+# Purpose: GitHub Actions template — verify (build + full test suite, including the migration
+#   drift check), build and push the production image to GHCR tagged with the commit SHA, then
+#   deploy exactly that image to a VPS with scripts/deploy.sh.
 # Caller: GitHub Actions on pushes to main (after copying to .github/workflows/deploy.yml).
-# Dependencies: GitHub service containers (PostgreSQL, Redis), docker/* actions,
-#   appleboy/ssh-action, VPS with docker compose and the project's .env.
+# Dependencies: GitHub service containers (PostgreSQL, Redis), docker/* actions, the runner's
+#   OpenSSH client, scripts/deploy.sh, VPS with docker compose, the compose files and .env.
 # Main Jobs: verify (blocks everything after it), build-and-push, deploy.
-# Side Effects: Uploads test reports, pushes images to GHCR, restarts containers on the VPS.
+# Side Effects: Uploads test reports, pushes images to GHCR, drains and restarts containers
+#   and applies migrations on the VPS.
 #
 # GitHub Actions: Verify, Build, Push to GHCR, Deploy to VPS
 #
@@ -16,7 +18,12 @@
 #      - VPS_SSH_KEY: private SSH key (ed25519 recommended)
 #      - VPS_PORT: SSH port (default 22)
 #   3. Update env vars below (IMAGE_NAME, DEPLOY_PATH)
-#   4. Ensure VPS has docker compose + the project's compose files + .env
+#   4. On the VPS, DEPLOY_PATH holds docker-compose.yml, docker-compose.prod.yml (from the
+#      .example; images use ${IMAGE_TAG}) and .env; docker compose must be installed
+#
+# Rollback: re-run the deploy job of an earlier successful run. It deploys that run's commit
+# image with that commit's scripts/deploy.sh (see the upgrade guide before rolling back
+# across a release with new job types).
 
 name: Build & Deploy
 
@@ -113,8 +120,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # The full commit SHA is the tag the deploy job pins.
           tags: |
-            type=sha,prefix=
+            type=sha,prefix=,format=long
             type=raw,value=latest
 
       - name: Build and push
@@ -131,38 +139,26 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build-and-push
+    permissions:
+      contents: read
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Pipes this commit's scripts/deploy.sh to the VPS: pull this commit's image, drain the
+      # outbox and queues, migrate, start, then wait for the API and worker health checks.
       - name: Deploy to VPS
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
-          script: |
-            cd ${{ env.DEPLOY_PATH }}
-
-            # Load environment variables (for PORT)
-            set -a && source .env && set +a
-
-            # Pull latest images
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-
-            # Restart services
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-            # Wait for health check (max 60s)
-            echo "Waiting for health check on port ${PORT:-3001}..."
-            for i in $(seq 1 12); do
-              if curl -sf http://localhost:${PORT:-3001}/api/v1/health/ready > /dev/null 2>&1; then
-                echo "Health check passed"
-                exit 0
-              fi
-              echo "  Attempt $i/12 - waiting 5s..."
-              sleep 5
-            done
-
-            echo "Health check failed after 60s"
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml logs api --tail 20
-            exit 1
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT || 22 }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" -o StrictHostKeyChecking=accept-new \
+            "$VPS_USER@$VPS_HOST" \
+            "cd '${{ env.DEPLOY_PATH }}' && IMAGE_TAG='${{ github.sha }}' DEPLOY_DRAIN=true sh -s" \
+            < scripts/deploy.sh

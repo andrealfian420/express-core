@@ -1,10 +1,12 @@
 # Purpose: Developer convenience wrapper around Docker Compose commands.
 # Caller: Developers, invoked directly (e.g. `make dev`, `make test module=auth`).
-# Dependencies: docker-compose*.yml, isolated docker-compose.test.yml, scripts/test-compose.sh.
+# Dependencies: docker-compose*.yml, isolated docker-compose.test.yml, scripts/test-compose.sh,
+#   scripts/release-rehearsal.sh.
 # Main Functions: dev, prod, build, migrate, seed, seeder, redrive, logs, down, clean, shell, studio,
-#   test, test-unit, test-watch, test-integration, test-http, test-down.
+#   test, test-unit, test-watch, test-integration, test-http, test-down, release-rehearsal.
 # Side Effects: Starts/stops Docker containers; migrate/seed/seeder write to the development DB;
-#   test targets use only the disposable express-core-testing Compose project.
+#   test targets use only the disposable express-core-testing Compose project; release-rehearsal
+#   only the disposable express-core-rehearsal project and images.
 .PHONY: dev prod build migrate seed seeder redrive logs down clean shell studio
 
 # Development (full Docker with hot-reload)
@@ -74,3 +76,9 @@ test-http:
 	sh scripts/test-compose.sh http $(module)
 test-down:
 	docker compose --env-file /dev/null -p express-core-testing -f docker-compose.test.yml down --volumes --remove-orphans
+
+# Release rehearsal with production images (isolated stack, throwaway secrets): fresh install,
+# upgrade from <ref>, rollback and upgrade again. Usage: make release-rehearsal from=<tag or commit>
+.PHONY: release-rehearsal
+release-rehearsal:
+	sh scripts/release-rehearsal.sh $(from)

@@ -1,9 +1,10 @@
 // Purpose: Compile and run isolated Node test suites with CI reports.
 // Caller: npm testing scripts, Makefile (through scripts/test-compose.sh) and CI.
 // Dependencies: TypeScript, Node test runner, c8, Prisma, ioredis, scripts/test-environment.cjs.
-// Main Functions: main, run, discover, testArgs, prepareServices.
-// Side Effects: Compiles tests into .test-build, migrates the verified test DB, writes
-//   test-results/ and coverage/ reports, removes the temporary storage root on exit.
+// Main Functions: main, run, discover, testArgs, prepareServices, assertNoMigrationDrift.
+// Side Effects: Compiles tests into .test-build, migrates the verified test DB (the `ci` suite
+//   then fails when prisma/schema.prisma differs from it), writes test-results/ and coverage/
+//   reports, removes the temporary storage root on exit.
 const { spawnSync, spawn } = require('node:child_process')
 const fs = require('node:fs')
 const os = require('node:os')
@@ -102,6 +103,37 @@ async function prepareServices() {
     redis.disconnect()
   }
   run('node_modules/.bin/prisma', ['migrate', 'deploy'])
+  if (suite === 'ci') assertNoMigrationDrift()
+}
+
+// The migrated test database must equal prisma/schema.prisma: a schema change without its
+// migration would pass tests here and then be missing in production.
+function assertNoMigrationDrift() {
+  const result = spawnSync(
+    'node_modules/.bin/prisma',
+    [
+      'migrate',
+      'diff',
+      '--from-schema-datasource',
+      'prisma/schema.prisma',
+      '--to-schema-datamodel',
+      'prisma/schema.prisma',
+      '--exit-code',
+      '--script',
+    ],
+    { stdio: ['ignore', 'pipe', 'inherit'], env: process.env, encoding: 'utf8' },
+  )
+  if (result.error) throw result.error
+  if (result.status === 0) {
+    console.log('Migration drift check: none')
+    return
+  }
+  process.stdout.write(result.stdout)
+  if (result.status === 2)
+    throw new Error(
+      'Migration drift: prisma/schema.prisma differs from the migrated database (SQL above); add a migration',
+    )
+  throw new Error(`prisma migrate diff failed (${result.status ?? result.signal})`)
 }
 
 async function main() {

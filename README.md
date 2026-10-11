@@ -2,6 +2,9 @@
 
 A production-ready, modular **Express.js v5 + TypeScript** REST API boilerplate. Includes JWT authentication, RBAC (Role-Based Access Control), background email queuing via BullMQ, Prisma ORM (PostgreSQL), Redis caching, file uploads, activity logging, and multiple security layers.
 
+Release notes: [CHANGELOG.md](CHANGELOG.md). Upgrading, deploying and rolling back:
+[docs/upgrading.md](docs/upgrading.md).
+
 ---
 
 ## Tech Stack
@@ -28,6 +31,9 @@ A production-ready, modular **Express.js v5 + TypeScript** REST API boilerplate.
 
 ```
 express-core/
+├── CHANGELOG.md                # Release notes, breaking changes first
+├── docs/                       # testing.md (test suites), upgrading.md (release, deploy, rollback)
+├── scripts/                    # deploy.sh, release rehearsal, test runner and Compose wrapper
 ├── ecosystem.config.js         # PM2 process config (api + worker)
 ├── tsconfig.json
 ├── prisma/
@@ -363,6 +369,7 @@ make seed
 | `make down`    | Stop all containers                              |
 | `make clean`   | Stop containers and remove volumes (fresh start) |
 | `make test`    | Full isolated test suite with coverage (see [Testing](#testing)) |
+| `make release-rehearsal from=<ref>` | Fresh install, upgrade from `<ref>`, rollback and re-upgrade with production images (isolated) |
 
 ---
 
@@ -681,7 +688,7 @@ Two deployment options are supported:
 
 | Option               | How it works                                                               | Best for                 |
 | -------------------- | -------------------------------------------------------------------------- | ------------------------ |
-| **A: Registry pull** | CI builds image → pushes to GHCR/Bitbucket Packages → VPS pulls + restarts | Teams, CI/CD pipelines   |
+| **A: Registry pull** | CI tests, builds an image tagged with the commit SHA, pushes it, then runs `scripts/deploy.sh` on the VPS | Teams, CI/CD pipelines   |
 | **B: Build on VPS**  | VPS does `git pull` → `docker compose up --build -d`                       | Solo devs, simple setups |
 
 ### Example CI/CD configs (in repo root)
@@ -691,6 +698,20 @@ Two deployment options are supported:
 - `docker-compose.prod.yml.example` — Production override (uses registry images)
 
 > Copy and rename without `.example` to activate. Configure secrets per the [CI/CD setup guide](DOCKER_IMPLEMENTATION.md#step-6-cicd-secrets-configuration).
+
+### Release, deploy and rollback
+
+`scripts/deploy.sh` deploys one image tag. It pulls the image and, with `DEPLOY_DRAIN=true`,
+first lets the worker finish the outbox and queued jobs. It then runs the migrations and waits
+until the API and worker are healthy. A rollback is a deploy of an earlier tag:
+
+```bash
+IMAGE_TAG=<commit sha> DEPLOY_DRAIN=true sh scripts/deploy.sh
+```
+
+Before a release, run `make release-rehearsal from=<previous release>`. The release
+procedure, the deploy options and the 2.x → 3.0 steps are in
+[docs/upgrading.md](docs/upgrading.md).
 
 ---
 
@@ -918,7 +939,7 @@ Automated tests run in a disposable Docker stack (separate PostgreSQL, Redis and
 temporary storage) and never touch the development database or `.env`:
 
 ```bash
-make test                      # unit + integration + HTTP, JUnit and coverage reports
+make test                      # unit + integration + HTTP, migration drift check, JUnit and coverage
 make test-unit module=utils    # one suite, filtered by test file name
 make test-down                 # remove a stack left by an interrupted run
 ```

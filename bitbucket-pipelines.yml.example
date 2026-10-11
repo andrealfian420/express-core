@@ -1,12 +1,16 @@
-# Purpose: Bitbucket Pipelines template — verify (build + full test suite), build and push
-#   the production image to Bitbucket Packages, then deploy to a VPS with Docker Compose.
+# Purpose: Bitbucket Pipelines template — verify (build + full test suite, including the
+#   migration drift check), build and push the production image to Bitbucket Packages tagged
+#   with the commit SHA, then deploy exactly that image to a VPS with scripts/deploy.sh.
 # Caller: Bitbucket Pipelines on pushes to main (after copying to bitbucket-pipelines.yml).
-# Dependencies: Bitbucket service containers (PostgreSQL, Redis), Docker service,
-#   atlassian/ssh-run pipe, VPS with docker compose and the project's .env.
+# Dependencies: Bitbucket service containers (PostgreSQL, Redis), Docker service, an Alpine
+#   step with the OpenSSH client, scripts/deploy.sh, VPS with docker compose, the compose
+#   files and .env.
 # Main Steps: 1) Verify — npm ci, prisma generate, build, unit/integration/HTTP tests with
 #   JUnit and coverage reports; any failure blocks the following steps.
-#   2) Build & Push Image. 3) Deploy to VPS with a readiness check.
-# Side Effects: Pushes images to the registry, restarts containers on the VPS.
+#   2) Build & Push Image (tags: commit SHA, latest). 3) Deploy to VPS: drain, migrate, start,
+#   wait for the API and worker health checks.
+# Side Effects: Pushes images to the registry, drains and restarts containers and applies
+#   migrations on the VPS.
 #
 # Bitbucket Pipelines: Verify, Build, Push to Bitbucket Packages, Deploy to VPS
 #
@@ -17,9 +21,14 @@
 #      - VPS_USER: SSH username (must be in docker group)
 #      - VPS_SSH_KEY: base64-encoded private SSH key (Secured)
 #      - VPS_PORT: SSH port (default 22)
-#   3. Update the image name below to match your workspace/repo
+#   3. Update the image name and the deploy path (/opt/your-project) below
 #   4. Enable Pipelines in repository settings
-#   5. Ensure VPS has docker compose + the project's compose files + .env
+#   5. On the VPS, the deploy path holds docker-compose.yml, docker-compose.prod.yml (from the
+#      .example; images use ${IMAGE_TAG}) and .env; docker compose must be installed
+#
+# Rollback: redeploy an earlier production deployment from the Deployments page. It runs that
+# commit's deploy step: its image and its scripts/deploy.sh (see the upgrade guide before
+# rolling back across a release with new job types).
 #
 # Notes:
 #   - Bitbucket Packages authentication is automatic within pipelines
@@ -80,7 +89,8 @@ pipelines:
             - docker
           script:
             - export IMAGE_NAME="docker.pkg.bitbucket.org/$BITBUCKET_WORKSPACE/$BITBUCKET_REPO_SLUG/app"
-            - export IMAGE_TAG="${BITBUCKET_COMMIT:0:7}"
+            # The full commit SHA is the tag the deploy step pins.
+            - export IMAGE_TAG="$BITBUCKET_COMMIT"
 
             # Build production image
             - docker build --target production -t $IMAGE_NAME:$IMAGE_TAG -t $IMAGE_NAME:latest .
@@ -92,27 +102,16 @@ pipelines:
       - step:
           name: Deploy to VPS
           deployment: production
+          image: alpine:3.20
           script:
-            - pipe: atlassian/ssh-run:0.8.1
-              variables:
-                SSH_USER: $VPS_USER
-                SERVER: $VPS_HOST
-                PORT: $VPS_PORT
-                SSH_KEY: $VPS_SSH_KEY
-                COMMAND: >
-                  cd /opt/your-project &&
-                  set -a && source .env && set +a &&
-                  docker compose -f docker-compose.yml -f docker-compose.prod.yml pull &&
-                  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d &&
-                  echo "Waiting for health check on port ${PORT:-3001}..." &&
-                  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
-                    if curl -sf http://localhost:${PORT:-3001}/api/v1/health/ready > /dev/null 2>&1; then
-                      echo "Health check passed";
-                      exit 0;
-                    fi;
-                    echo "  Attempt $i/12 - waiting 5s...";
-                    sleep 5;
-                  done;
-                  echo "Health check failed after 60s";
-                  docker compose -f docker-compose.yml -f docker-compose.prod.yml logs api --tail 20;
-                  exit 1
+            - apk add --no-cache openssh-client
+            - install -m 700 -d ~/.ssh
+            - echo "$VPS_SSH_KEY" | base64 -d > ~/.ssh/deploy_key
+            - chmod 600 ~/.ssh/deploy_key
+            # Pipes this commit's scripts/deploy.sh to the VPS: pull this commit's image, drain
+            # the outbox and queues, migrate, start, then wait for the API and worker health.
+            - >-
+              ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" -o StrictHostKeyChecking=accept-new
+              "$VPS_USER@$VPS_HOST"
+              "cd /opt/your-project && IMAGE_TAG=$BITBUCKET_COMMIT DEPLOY_DRAIN=true sh -s"
+              < scripts/deploy.sh
