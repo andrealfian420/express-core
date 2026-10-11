@@ -1,3 +1,9 @@
+// Purpose: Role routes: authenticated catalogues for the role editor (permission tree, user
+//   types) and permission-gated role CRUD.
+// Caller: src/routes/index.ts (mounted at /api/v1/roles).
+// Dependencies: role.controller, role.validation, auth/rbac/validate middleware, role.permissions.
+// Main Functions: Router (default export).
+// Side Effects: None at definition; handlers read/write roles through role.service.
 import { Router } from 'express'
 import roleController from './role.controller'
 import { createRoleSchema, updateRoleSchema } from './role.validation'
@@ -11,6 +17,7 @@ const router = Router()
 router.use(authMiddleware)
 
 router.get('/access-list', roleController.accessList)
+router.get('/user-types', roleController.userTypes)
 
 router.get(
   '/',

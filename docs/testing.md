@@ -61,7 +61,10 @@ user, password and database `express_core_test`, and Redis password `express_cor
   and dead-letter writes (`email-worker.test.ts`); the once-only re-drive and its CLI
   (`dead-letter.test.ts`); stable pages over duplicate sort values and relational search on
   PostgreSQL (`paginator.test.ts`); RBAC cache invalidation after role and user changes,
-  including a change that commits while a request caches the old state (`role-cache.test.ts`); the seed CLI on a fresh database, reruns that keep administrator
+  including a change that commits while a request caches the old state (`role-cache.test.ts`);
+  the user-type gate (allowed and denied types, no role, deleted users, unknown types refused
+  at route definition, one role lookup for chained gates, type changes applying at once, cache
+  entries without `userType` refilled: `user-type.test.ts`); the seed CLI on a fresh database, reruns that keep administrator
   edits, and argument handling (`seed.test.ts`); registration OTP: keyed code storage, resend
   cooldown, the attempt limit under parallel guessing, tickets, single consumption, the
   registration window, the default role in both modes and cleanup (`otp.test.ts`, which
@@ -77,7 +80,8 @@ user, password and database `express_core_test`, and Redis password `express_cor
   the email template editor (permissions, sanitized and validated edits, audit), upload
   rejections (400/413, no file left behind), profile details (set, read back, clear via JSON
   and multipart, admin visibility without admin writes, audit privacy, one row under parallel
-  first-time updates), client-safe user payloads, profile ownership, user/role administration, audit
+  first-time updates), the user-type catalogue endpoint and role `userType` validation (roles
+  with an unlisted type stay editable), client-safe user payloads, profile ownership, user/role administration, audit
   records, soft delete (which revokes the user's refresh sessions) and RBAC cache invalidation.
 - `tests/support`: guarded reset, the `actor()` identity fixture and the HTTP helper.
 

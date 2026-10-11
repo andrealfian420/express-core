@@ -1,8 +1,8 @@
 // Purpose: Versioned cache of each user's role and permissions for the RBAC middleware. A
 //   global version counter is bumped after every committed change that can alter someone's
 //   access; cached entries stamped with an older version are ignored.
-// Caller: rbac.middleware (read/write), role.service and user.service (invalidateAccess after
-//   commit).
+// Caller: middleware/resolve-role (read/write for checkPermission and checkUserType),
+//   role.service and user.service (invalidateAccess after commit).
 // Dependencies: cache.service (Redis).
 // Main Functions: readUserAccess, cacheUserAccess, invalidateAccess, RBAC_VERSION_KEY,
 //   USER_ROLE_CACHE_TTL.
@@ -12,6 +12,7 @@
 //   from caching that old state after the deletion. Reading the version together with the
 //   entry, BEFORE the database read, and stamping it on the write closes that window: such a
 //   write carries the pre-change version and is treated as a miss on the next request.
+//   Entries whose role lacks `userType` (cached before roles carried it) are misses too.
 import cacheService from './cache.service'
 import { CachedUserData } from '../types/express'
 
@@ -29,10 +30,10 @@ export async function readUserAccess(
     RBAC_VERSION_KEY,
   )
   const version = stored ?? 0
-  return {
-    cached: entry && entry.rbacVersion === version ? entry : null,
-    version,
-  }
+  const current =
+    entry?.rbacVersion === version &&
+    (entry.role === null || typeof entry.role.userType === 'string')
+  return { cached: current ? entry : null, version }
 }
 
 // `version` must be the value readUserAccess returned before the database read.

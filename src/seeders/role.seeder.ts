@@ -2,11 +2,12 @@
 //   on later runs only permission values it does not have yet (e.g. from a newly added module)
 //   are granted. Nothing is removed and the title/description are never changed.
 // Caller: src/seeders/index.ts (seed runner), admin-user.seeder (role lookup), integration tests.
-// Dependencies: Prisma Client, role.permissions (ALL_PERMISSIONS).
+// Dependencies: Prisma Client, role.permissions (ALL_PERMISSIONS), role.user-types (UserType).
 // Main Functions: roleSeeder (default), grantPermissions, findSuperAdminRole, SUPER_ADMIN_SLUG.
 // Side Effects: INSERT into roles, or one UPDATE that appends missing access values.
 import { PrismaClient, Role } from '@prisma/client'
 import { ALL_PERMISSIONS } from '../modules/role/role.permissions'
+import { UserType } from '../modules/role/role.user-types'
 import { Seeder } from './seeder.types'
 
 export const SUPER_ADMIN_SLUG = 'super-admin'
@@ -53,7 +54,7 @@ const roleSeeder: Seeder = {
         data: {
           slug: SUPER_ADMIN_SLUG,
           title: 'Super Administrator',
-          userType: 'Administrator',
+          userType: 'Administrator' satisfies UserType,
           description: 'Full access to all modules',
           access: ALL_PERMISSIONS,
         },

@@ -1,6 +1,14 @@
+// Purpose: HTTP handlers for role management plus the role editor's catalogues (permission
+//   tree and user types).
+// Caller: role.route.
+// Dependencies: role.service, role.permissions (ACCESS_LIST), role.user-types (USER_TYPES),
+//   utils/response.
+// Main Functions: index, show, store, update, destroy, accessList, userTypes.
+// Side Effects: Through role.service: role and activity-log writes, RBAC cache invalidation.
 import { Request, Response, NextFunction } from 'express'
 import roleService from './role.service'
 import { ACCESS_LIST } from './role.permissions'
+import { USER_TYPES } from './role.user-types'
 import response from '../../utils/response'
 
 // Controller functions for Role management
@@ -61,6 +69,11 @@ class RoleController {
   // Returns the full permission tree for Frontend consumption
   accessList(req: Request, res: Response): void {
     response(res, ACCESS_LIST, 'Access list retrieved successfully')
+  }
+
+  // Returns the user types a role may carry, for the role editor
+  userTypes(req: Request, res: Response): void {
+    response(res, USER_TYPES, 'User types retrieved successfully')
   }
 }
 

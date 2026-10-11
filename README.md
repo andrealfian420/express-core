@@ -79,7 +79,9 @@ express-core/
     │   ├── origin-check.middleware.ts # Origin/Referer guard for cookie auth endpoints
     │   ├── rate-limit.middleware.ts # Redis-backed rate limiters
     │   ├── rbac.middleware.ts       # RBAC permission check (Redis-cached)
+    │   ├── resolve-role.ts          # Shared role lookup for the access gates (cache → DB)
     │   ├── upload.middleware.ts     # Multer file upload factory
+    │   ├── user-type.middleware.ts  # Gate by the role's user type (checkUserType)
     │   ├── validate.middleware.ts   # Zod request validation
     │   └── xss.middleware.ts        # XSS sanitizer for req.body / req.query
     ├── modules/
@@ -191,6 +193,32 @@ super-admin role gains the new values and no other role changes. Role edits, rol
 deletion, user role changes and user deletion bump the version after commit, so they apply
 on the next request, even when a request was caching the old state at that moment. The
 seeder does not use Redis: permissions it grants apply within 5 minutes.
+
+#### User-type gate
+
+Every role also has a `userType`, one of the values in
+[src/modules/role/role.user-types.ts](src/modules/role/role.user-types.ts) (`Administrator`,
+`Member` by default). `POST/PUT /roles` refuse other values with `400`, and
+`GET /roles/user-types` lists them for the role editor.
+
+`checkUserType(...types)` admits only users whose role has one of the given types, for areas
+meant for a kind of user rather than for one permission (e.g. a member-only API). No core
+route uses it:
+
+```ts
+router.get('/dashboard', authMiddleware, checkUserType('Member'), dashboardController.show)
+```
+
+- It uses the same cached role as `checkPermission`. When both guard a route, the role is
+  read once per request, and changing a role's type applies on the next request.
+- It answers `403 Access denied` for other types and `403 Access denied: no role assigned` for
+  a user without a role.
+- A type missing from the catalogue makes `checkUserType` throw when the routes load, so the
+  API does not start.
+
+To add a type, add it to `USER_TYPES` first. Roles saved before this check with another
+`userType` keep working and can still be edited; only a change of their type must use a
+listed value.
 
 ### Rate Limiting
 
@@ -759,6 +787,7 @@ The audit log records which detail fields changed, never their values.
 | Method | Endpoint             | Permission                       | Description                          |
 | ------ | -------------------- | -------------------------------- | ------------------------------------ |
 | GET    | `/roles/access-list` | ✓ (auth only)                    | Get full structured permissions tree |
+| GET    | `/roles/user-types`  | ✓ (auth only)                    | List the user types a role may carry |
 | GET    | `/roles`             | `module.master-data.role.index`  | List roles (paginated)               |
 | GET    | `/roles/:slug`       | `module.master-data.role.index`  | Get role by slug                     |
 | POST   | `/roles`             | `module.master-data.role.create` | Create role with access JSON         |

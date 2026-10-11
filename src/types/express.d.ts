@@ -1,6 +1,7 @@
 // Purpose: Extend Express Request with authentication/RBAC fields and declare the cached RBAC
 //   user shape.
-// Caller: auth.middleware, rbac.middleware, rbac-cache.service, controllers reading req.user.
+// Caller: auth.middleware, resolve-role (rbac/user-type middleware), rbac-cache.service,
+//   controllers reading req.user / req.role.
 // Dependencies: Express namespace.
 // Main Functions: RoleData, CachedUserData, Express.Request augmentation.
 // Side Effects: None (type declarations only).
@@ -10,6 +11,7 @@ export {}
 export interface RoleData {
   id: string | number
   slug: string
+  userType: string // Role.userType; gated by checkUserType (catalogue: role.user-types)
   access: string[] // Array of permission strings
 }
 
