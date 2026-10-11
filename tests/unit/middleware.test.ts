@@ -14,6 +14,7 @@ import origin from '../../src/middleware/origin-check.middleware'
 import validate from '../../src/middleware/validate.middleware'
 import errors from '../../src/middleware/error.middleware'
 import AppError from '../../src/utils/appError'
+import { MulterError } from 'multer'
 import { loginSchema } from '../../src/modules/auth/auth.validation'
 
 function app() {
@@ -31,6 +32,15 @@ function app() {
   })
   app.get('/upstream', () => {
     throw new AppError('Upstream failed', 502, [{ detail: 'internal host db-1' }])
+  })
+  app.get('/unavailable', () => {
+    throw new AppError('Registration is temporarily unavailable', 500)
+  })
+  app.get('/too-large', () => {
+    throw new MulterError('LIMIT_FILE_SIZE', 'avatar')
+  })
+  app.get('/unexpected-file', () => {
+    throw new MulterError('LIMIT_UNEXPECTED_FILE', 'cover')
   })
   app.use(errors)
   return supertest(app)
@@ -88,13 +98,27 @@ test('validate: strips unknown fields and rejects malformed input without leakin
   ])
 })
 
-test('error: AppError keeps its status and unknown errors become 500 outside development', async () => {
+test('error: AppError keeps its status and message; other server errors hide theirs outside development', async () => {
   const http = app()
   const teapot = await http.get('/teapot').expect(418)
   assert.deepEqual(teapot.body, { success: false, message: 'Short and stout' })
   const boom = await http.get('/boom').expect(500)
-  assert.equal(boom.body.success, false)
-  assert.equal(boom.body.stack, undefined)
+  // Regression: the raw message of unexpected errors (e.g. database errors) used to be returned.
+  assert.deepEqual(boom.body, { success: false, message: 'Internal Server Error' })
+  const unavailable = await http.get('/unavailable').expect(500)
+  assert.equal(unavailable.body.message, 'Registration is temporarily unavailable')
+  // Client errors raised by libraries keep their status and message.
+  const malformed = await http
+    .post('/validate')
+    .set('Content-Type', 'application/json')
+    .send('{"email":')
+    .expect(400)
+  assert.match(malformed.body.message, /JSON/)
+  assert.deepEqual((await http.get('/too-large').expect(413)).body, {
+    success: false,
+    message: 'File too large',
+  })
+  await http.get('/unexpected-file').expect(400)
   // Details attached to server errors stay out of responses outside development.
   const upstream = await http.get('/upstream').expect(502)
   assert.deepEqual(upstream.body, { success: false, message: 'Upstream failed' })

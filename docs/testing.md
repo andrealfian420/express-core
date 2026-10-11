@@ -73,7 +73,8 @@ user, password and database `express_core_test`, and Redis password `express_cor
 - `tests/http`: access matrix (401/403/200), CORS rejection, the Origin/Referer matrix on
   cookie endpoints, Bearer-only protected routes, cookie attributes, parallel cookie refresh
   and reuse, OTP routes absent in link mode and the send → verify → register flow in OTP mode,
-  the email template editor (permissions, sanitized and validated edits, audit), client-safe user payloads, profile ownership, user/role administration, audit
+  the email template editor (permissions, sanitized and validated edits, audit), upload
+  rejections (400/413, no file left behind), client-safe user payloads, profile ownership, user/role administration, audit
   records, soft delete (which revokes the user's refresh sessions) and RBAC cache invalidation.
 - `tests/support`: guarded reset, the `actor()` identity fixture and the HTTP helper.
 

@@ -225,8 +225,10 @@ On error:
 ```
 
 `errors` appears on client errors (4xx) that carry field details, in every environment.
-Server errors (5xx) return only `success` and `message`; their details and the stack are
-added only when `NODE_ENV=development`.
+Server errors (5xx) return only `success` and `message`. Outside `NODE_ENV=development` an
+unexpected error (database, library) answers `"Internal Server Error"`; its real message and
+stack go to the log only. Upload rejections are client errors: wrong type or extension 400,
+too large 413.
 
 ### Pagination (Laravel-style)
 

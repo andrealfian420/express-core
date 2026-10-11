@@ -1,14 +1,17 @@
 // Purpose: Build Multer upload middleware with MIME/extension validation and per-field limits.
 // Caller: Module routes (user and profile avatar uploads).
-// Dependencies: multer, crypto, fs, path, config/storage (uploadsRoot).
+// Dependencies: multer, crypto, fs, path, config/storage (uploadsRoot), AppError.
 // Main Functions: createUploader, createFieldsUploader.
 // Side Effects: Creates upload folders at import time and writes uploaded files to local storage.
+// Notes: Rejections are AppErrors (400 for type/extension/field, 413 for size) so clients see
+//   why; Multer's own limit errors are mapped to 413/400 by the error middleware.
 import { Request, Response, NextFunction } from 'express'
 import multer, { Field, FileFilterCallback } from 'multer'
 import path from 'path'
 import crypto from 'crypto'
 import fs from 'fs'
 import { uploadsRoot } from '../config/storage'
+import AppError from '../utils/appError'
 
 const STORAGE_PATH = uploadsRoot
 
@@ -62,7 +65,7 @@ function createUploader(
     cb: FileFilterCallback,
   ) => {
     if (!allowedTypes.includes(file.mimetype)) {
-      return cb(new Error('Invalid file type'))
+      return cb(new AppError('Invalid file type', 400))
     }
 
     // validate file extension as well to prevent spoofing
@@ -73,7 +76,7 @@ function createUploader(
     })
 
     if (!validExts.includes(ext)) {
-      return cb(new Error('Invalid file extension'))
+      return cb(new AppError('Invalid file extension', 400))
     }
 
     cb(null, true)
@@ -138,11 +141,11 @@ function createFieldsUploader(fieldConfigs: FieldConfig[]) {
   ) => {
     const cfg = configMap[file.fieldname]
     if (!cfg) {
-      return cb(new Error('Unexpected field'))
+      return cb(new AppError('Unexpected field', 400))
     }
 
     if (!cfg.allowedTypes.includes(file.mimetype)) {
-      return cb(new Error(`Invalid file type for field "${file.fieldname}"`))
+      return cb(new AppError(`Invalid file type for field "${file.fieldname}"`, 400))
     }
 
     // validate file extension as well to prevent spoofing
@@ -150,7 +153,7 @@ function createFieldsUploader(fieldConfigs: FieldConfig[]) {
     const validExts = cfg.allowedTypes.map((t) => MIME_EXT_MAP[t])
     if (!validExts.includes(ext)) {
       return cb(
-        new Error(`Invalid file extension for field "${file.fieldname}"`),
+        new AppError(`Invalid file extension for field "${file.fieldname}"`, 400),
       )
     }
 
@@ -183,8 +186,9 @@ function createFieldsUploader(fieldConfigs: FieldConfig[]) {
           if (cfg && files[0] && files[0].size > cfg.maxSize) {
             fs.unlink(files[0].path, () => {})
             return next(
-              new Error(
+              new AppError(
                 `File "${fieldname}" exceeds the maximum allowed size of ${cfg.maxSize / (1024 * 1024)}MB`,
+                413,
               ),
             )
           }
