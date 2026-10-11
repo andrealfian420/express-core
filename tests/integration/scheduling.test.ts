@@ -1,6 +1,6 @@
 // Purpose: Verify maintenance schedules (hourly token cleanup and daily retention: registration,
 //   job payload/options, time-slot deduplication that survives completion, enqueue failures)
-//   and Redis-backed rate limiting.
+//   and Redis-backed rate limiting (limits, and separate counters per limiter).
 // Caller: Node integration runner.
 // Dependencies: node-cron (mocked schedule), system queue, a test-owned BullMQ worker,
 //   Express, Supertest and isolated Redis.
@@ -116,7 +116,7 @@ test('cron: a failed enqueue is logged and never escapes as an unhandled rejecti
 
 test('rate-limit: exceeding the limit returns 429 with standard headers', async () => {
   const app = express()
-  app.use(createRateLimiter({ max: 2, windowMs: 60000 }))
+  app.use(createRateLimiter({ name: 'test', max: 2, windowMs: 60000 }))
   app.get('/', (_req, res) => res.sendStatus(200))
   const http = supertest(app)
   await http.get('/').expect(200)
@@ -124,4 +124,23 @@ test('rate-limit: exceeding the limit returns 429 with standard headers', async 
   const denied = await http.get('/').expect(429)
   assert.equal(denied.body.success, false)
   assert.ok(denied.headers['ratelimit-limit'])
+})
+
+test('rate-limit: each limiter counts on its own, so API traffic cannot use up the login limit (regression)', async () => {
+  const app = express()
+  app.use(createRateLimiter({ name: 'test-api', max: 100, windowMs: 60000 }))
+  app.get('/data', (_req, res) => res.sendStatus(200))
+  app.post(
+    '/login',
+    createRateLimiter({ name: 'test-login', max: 2, windowMs: 60000 }),
+    (_req, res) => res.sendStatus(200),
+  )
+  const http = supertest(app)
+  for (let i = 0; i < 3; i++) await http.get('/data').expect(200)
+  // Before the fix every limiter shared one `rl:<ip>` counter, already past the login limit here.
+  await http.post('/login').expect(200)
+  await http.post('/login').expect(200)
+  await http.post('/login').expect(429)
+  const prefixes = (await redis.keys('rl:*')).map((key) => key.split(':').slice(0, 2).join(':'))
+  assert.deepEqual([...new Set(prefixes)].sort(), ['rl:test-api', 'rl:test-login'])
 })

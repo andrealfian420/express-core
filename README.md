@@ -223,15 +223,22 @@ listed value.
 ### Rate Limiting
 
 All rate limiters are backed by **Redis** — safe for clustered/multi-instance deployments.
+Each limiter counts per client IP under its own key (`rl:<name>:<ip>`), so requests counted by
+one limiter never use up another's limit. The auth limits below apply when
+`NODE_ENV=production`; other environments allow 1000 per window.
 
-| Limiter                | Window | Max Requests |
-| ---------------------- | ------ | ------------ |
-| API (general)          | 15 min | 1000         |
-| Auth (general)         | 15 min | 50           |
-| Login                  | 15 min | 10           |
-| Register               | 1 hour | 20           |
-| Request password reset | 15 min | 5            |
-| Reset password         | 15 min | 10           |
+| Limiter                     | Name (`rl:<name>:`)      | Window | Max Requests |
+| --------------------------- | ------------------------ | ------ | ------------ |
+| API (general)               | `api`                    | 15 min | 1000         |
+| Auth (general)              | `auth`                   | 15 min | 50           |
+| Login                       | `login`                  | 15 min | 10           |
+| Register                    | `register`               | 1 hour | 20           |
+| Request password reset      | `password-reset-request` | 15 min | 5            |
+| Reset password              | `password-reset`         | 15 min | 10           |
+| Send registration code      | `otp-send`               | 15 min | 5            |
+| Verify registration code    | `otp-verify`             | 15 min | 20           |
+
+A new limiter made with `createRateLimiter({ name, windowMs, max })` needs a name of its own.
 
 ### Standard Response Format
 

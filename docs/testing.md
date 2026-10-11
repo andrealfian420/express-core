@@ -72,7 +72,7 @@ user, password and database `express_core_test`, and Redis password `express_cor
   (built-in fallback, database text, next-email edits, escaping, the template seeder:
   `email-template.test.ts`); cache (multi-key delete, member removal),
   readiness failures, maintenance cleanup (batched refresh-token retention), audit
-  persistence, cron schedules, Redis rate limiting, and the real API/worker entrypoints run
+  persistence, cron schedules, Redis rate limiting (a separate counter per limiter), and the real API/worker entrypoints run
   as child processes (`process.test.ts`).
 - `tests/http`: access matrix (401/403/200), CORS rejection, the Origin/Referer matrix on
   cookie endpoints, Bearer-only protected routes, cookie attributes, parallel cookie refresh
