@@ -21,7 +21,7 @@ import systemService from '../../services/system.service'
 import prisma from '../../config/database'
 import storageService from '../../services/storage.service'
 import { Prisma, User } from '@prisma/client'
-import { UserProfileData } from '../user/user.types'
+import { UserDetailData } from '../user/user.types'
 import { PrismaTx } from '../../types/prisma'
 import { env } from '../../config/env'
 
@@ -33,14 +33,14 @@ class UserService {
     return await userRepository.getUsers(req)
   }
 
-  async getUserBySlug(slug: string): Promise<UserProfileData> {
+  async getUserBySlug(slug: string): Promise<UserDetailData> {
     const row = await userRepository.findDetail(slug)
 
     if (!row) {
       throw new AppError('User not found', 404)
     }
 
-    const user: UserProfileData = { ...row, profile: toProfileResponse(row.profile ?? null) }
+    const user: UserDetailData = { ...row, profile: toProfileResponse(row.profile ?? null) }
 
     if (user.avatar) {
       user.avatarUrl = storageService.getPublicUrl(

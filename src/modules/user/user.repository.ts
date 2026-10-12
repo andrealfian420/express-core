@@ -1,5 +1,5 @@
-// Purpose: Data access for users: paginated listing, lookups by slug/email (with the extended
-//   profile for the admin detail view), create, update and soft delete.
+// Purpose: Data access for users: paginated listing, lookups by slug/email (with the role and
+//   extended profile for the admin detail view), create, update and soft delete.
 // Caller: user.service, profile.service, auth flows.
 // Dependencies: Prisma client (soft-delete extension), utils/paginator.
 // Main Functions: getUsers, find, findDetail, findByEmail, findBySlugExcluding, create,
@@ -9,7 +9,7 @@ import { Request } from 'express'
 import prisma from '../../config/database'
 import { Prisma, User } from '@prisma/client'
 import { paginate, PaginatedResult } from '../../utils/paginator'
-import { UserListData, UserProfileData } from '../user/user.types'
+import { UserDetailData, UserListData, UserProfileData } from '../user/user.types'
 import { PrismaTx } from '../../types/prisma'
 
 // UserRepository handles all database operations related to the User model
@@ -75,9 +75,9 @@ class UserRepository {
     })
   }
 
-  // Admin user detail: `find` plus the extended profile details (one LEFT JOIN on the
-  // user_profiles primary key).
-  async findDetail(slug: string): Promise<UserProfileData | null> {
+  // Admin user detail: `find` plus the role reference and the extended profile details (one
+  // LEFT JOIN each on primary keys).
+  async findDetail(slug: string): Promise<UserDetailData | null> {
     return await prisma.user.findFirst({
       where: { slug, deletedAt: null },
       select: {
@@ -88,6 +88,9 @@ class UserRepository {
         isEmailVerified: true,
         avatar: true,
         roleId: true,
+        role: {
+          select: { id: true, slug: true, title: true },
+        },
         profile: {
           select: { phone: true, birthDate: true, gender: true, locale: true },
         },

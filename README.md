@@ -784,9 +784,10 @@ Refresh sessions:
 
 User payloads returned by `POST/PUT /users`, `GET /users/:slug`, `GET/PUT /profile` and
 `POST /auth/register` contain only public fields (`slug`, `name`, `email`, `avatar`,
-`avatarUrl`, `isEmailVerified`, `createdAt`, `updatedAt` and, for the profile, `role`).
-They never include `password`, `id`, `roleId` or `deletedAt`; `slug` is the public
-identifier. The paginated `GET /users` list still returns `id` and the nested `role`
+`avatarUrl`, `isEmailVerified`, `createdAt`, `updatedAt` and `role`: `title` and `access`
+for the profile, `id`, `slug` and `title` for `GET /users/:slug`, so an edit form can
+preselect the role). They never include `password`, `id`, `roleId` or `deletedAt` at the top
+level; `slug` is the public identifier. The paginated `GET /users` list still returns `id` and the nested `role`
 (`id`, `title`, `slug`, `userType`).
 
 ### Profile _(auth required)_

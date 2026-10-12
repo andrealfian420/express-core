@@ -8,6 +8,13 @@ Side Effects: None; documentation only. -->
 Notable changes to Express Core. Versions follow [Semantic Versioning](https://semver.org/).
 Upgrade and rollback steps live in [docs/upgrading.md](docs/upgrading.md).
 
+## Unreleased
+
+### Added
+
+- `GET /users/:slug` returns the user's `role` (`id`, `slug`, `title`), so admin clients can
+  preselect it when editing. `roleId` stays out of single-user payloads.
+
 ## 3.0.0 - 2026-10-11
 
 Hardens 2.0.0 for production (verified delivery, safe sessions, strict configuration, tests and

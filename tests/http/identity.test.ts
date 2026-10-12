@@ -102,6 +102,8 @@ test('role/user: create, validation, duplicate rejection, safe serialization, up
   const shown = await api('get', `/users/${user.slug}`, token).expect(200)
   assertSafeUser(shown.body.data)
   assert.equal(shown.body.data.email, input.email)
+  // The detail carries the role reference so an edit form can preselect it.
+  assert.deepEqual(shown.body.data.role, { id: role.id, slug: role.slug, title: 'Editor' })
   const updated = (
     await api('put', `/users/${user.slug}`, token)
       .send({ name: 'Updated User', roleId: String(role.id), password: 'Changed2!' })

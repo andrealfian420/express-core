@@ -1,7 +1,7 @@
 // Purpose: Shared user payload types for the user and profile modules.
 // Caller: user/profile repositories, services and controllers.
 // Dependencies: Prisma types, profile.fields (ProfileResponse).
-// Main Functions: UserProfileData, UserListData.
+// Main Functions: UserProfileData, UserDetailData, UserListData.
 // Side Effects: None (type declarations only).
 import { Prisma } from '@prisma/client'
 import { ProfileResponse } from '../profile/profile.fields'
@@ -49,4 +49,10 @@ export type UserListData = Prisma.UserGetPayload<{
 }> & {
   roleName?: string
   registeredAt?: string
+}
+
+// Admin user detail (GET /users/:slug). The role reference lets a client preselect the
+// user's role when editing; its id is the value /utils/role-options already exposes.
+export type UserDetailData = Omit<UserProfileData, 'role'> & {
+  role: { id: number; slug: string; title: string } | null
 }
