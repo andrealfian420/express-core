@@ -24,8 +24,12 @@ test('storage: one configured root serves uploads, deletion and existence checks
   assert.equal(fs.existsSync(sibling), true)
   assert.doesNotThrow(() => storage.deleteFile('avatars', 'missing.png'))
   assert.equal(storage.fileExists('avatars', 'missing.png'), false)
-  assert.equal(
-    storage.getPublicUrl('uploads/avatars', 'test.png'),
-    'http://test.invalid/storage/uploads/avatars/test.png',
-  )
+  // Regression: '/uploads/avatars' (as the user and profile services pass it) produced
+  // '/storage//uploads/...', which path-based allowlists such as next/image reject.
+  for (const folder of ['uploads/avatars', '/uploads/avatars', '/uploads/avatars/']) {
+    assert.equal(
+      storage.getPublicUrl(folder, 'test.png'),
+      'http://test.invalid/storage/uploads/avatars/test.png',
+    )
+  }
 })

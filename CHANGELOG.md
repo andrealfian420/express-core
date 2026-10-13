@@ -15,6 +15,12 @@ Upgrade and rollback steps live in [docs/upgrading.md](docs/upgrading.md).
 - `GET /users/:slug` returns the user's `role` (`id`, `slug`, `title`), so admin clients can
   preselect it when editing. `roleId` stays out of single-user payloads.
 
+### Fixed
+
+- `avatarUrl` contained `//` (`/storage//uploads/avatars/...`), which path-based allowlists
+  such as Next.js `images.remotePatterns` reject. It is now `/storage/uploads/avatars/...`;
+  both forms keep serving the file.
+
 ## 3.0.0 - 2026-10-11
 
 Hardens 2.0.0 for production (verified delivery, safe sessions, strict configuration, tests and
